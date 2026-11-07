@@ -29,6 +29,8 @@ type Run struct {
 	Namespace   string          `json:"namespace"`
 	Description string          `json:"description"`
 	State       string          `json:"state"`
+	Error       *RuntimeError   `json:"error,omitempty"`
+	History     []RuntimeStatus `json:"state_history"`
 	CreatedAt   string          `json:"created_at"`
 	FinishedAt  string          `json:"finished_at"`
 	Details     json.RawMessage `json:"run_details"`

@@ -9,6 +9,7 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/dto"
 	"github.com/githubtiger123/loom/platform/internal/infra/kfp"
 	"github.com/githubtiger123/loom/platform/internal/infra/logarchive"
+	"github.com/githubtiger123/loom/platform/internal/infra/mlmd"
 	"github.com/githubtiger123/loom/platform/internal/k8s"
 	"github.com/githubtiger123/loom/platform/internal/service"
 )
@@ -20,6 +21,7 @@ func newBusinessService(base *service.Service, client *k8s.Client) *service.Serv
 	if client != nil {
 		base.SetNotebookReader(client)
 		base.PipelineLogs = client
+		base.PipelineTerminal = client
 	}
 	return base
 }
@@ -28,6 +30,9 @@ func configurePipeline(base *service.Service, cfg config.Pipeline) {
 	base.PipelineConfig = cfg
 	if cfg.Enabled {
 		base.PipelineClient = kfp.New(cfg.Endpoint, cfg.TokenFile, cfg.Timeout.Std())
+		if cfg.MetadataEndpoint != "" {
+			base.PipelineMetadata = mlmd.New(cfg.MetadataEndpoint, cfg.MetadataTokenFile, cfg.Timeout.Std())
+		}
 	}
 }
 

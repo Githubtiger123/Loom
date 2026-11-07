@@ -28,9 +28,11 @@ type Service struct {
 	NotebookReader            NotebookReader
 	NotebookImages            *config.NotebookImageCatalog
 	PipelineClient            *kfp.Client
+	PipelineMetadata          PipelineMetadataReader
 	PipelineConfig            config.Pipeline
 	PipelineVerifier          PipelineSpaceVerifier
 	PipelineLogs              PipelineLogReader
+	PipelineTerminal          PipelineTerminalClient
 	PipelineLogArchivesReader PipelineLogArchiveReader
 }
 

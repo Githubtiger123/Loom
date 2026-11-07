@@ -3,6 +3,8 @@
 当前进度：已补充认证会话管理、空间生命周期、配额预算、独立工作目录、Notebook 执行与诊断，以及 Pipeline / Trainer / KServe 业务 API 和独立 mTLS 执行桥；Notebook 镜像目录通过独立配置加载。Pipeline 已补入官方 KFP v2 的 IR 导入、提交、取消、状态轮询和节点详情主线。仅交付后端源码，不包含前端、实际网关部署及 Trainer/KServe 实际适配器。
 按用户要求不新增测试、不测试、不编译、不运行项目或迁移。当前改动仅做源码与文档级核对，不代表真实 MySQL、身份网关或 Kubernetes 集成已经验证。
 
+Pipeline 后端新增 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行 IR 快照 + KFP 状态 + MLMD 参数/产物元数据；不包含前端或产物可视化。
+
 ## 持久化与校验约定
 
 业务路由统一放在 `internal/route/route.go` 一个文件中，按模块注释分组；`route.New` 统一装配认证。对应请求处理方法仍按模块放在 `internal/handler`，handler 不注册 URL。入口通过 `route.New(handler.New(...))` 完成组装，原有接口路径及响应约定保持不变。
@@ -89,7 +91,9 @@ go run ./cmd/platform -cmd=pipeline-worker -worker-concurrency=4
 
 Pipeline 支持版本原地编辑和运行“清理后编辑、手动重建”。显式应用新增 `000017_pipeline_edit.sql` 后，同步升级 API/worker；业务运行 ID 保留，重建换新 instanceId/KFP Run ID，旧执行快照保留。详见 [编辑接口](docs/pipeline-edit.md)。本轮未执行迁移或真实联调。
 
-Pipeline 在线日志通过公共 `internal/k8s/podlog` Reader 直读 Kubernetes，支持快照和 follow；Notebook 现有日志快照也复用该组件。需显式应用 `000018_pipeline_logs.sql`，并为 API 机器身份配置只读 pods/log 与执行归属核验权限，详见 [日志接口](docs/pod-logs.md)。[离线日志](docs/log-archives.md) 使用独立 `log_archive` 配置从 MinIO 按需读取清单和日志，不新增日志表，支持历史/软删除运行；采集端需提前上传约定格式，不安装采集器，不自动适配任意 Argo 归档桶。终端仍未实现。
+Pipeline 在线日志通过公共 `internal/k8s/podlog` Reader 直读 Kubernetes，支持快照和 follow；Notebook 现有日志快照也复用该组件。需显式应用 `000018_pipeline_logs.sql`，并为 API 机器身份配置只读 pods/log 与执行归属核验权限，详见 [日志接口](docs/pod-logs.md)。[离线日志](docs/log-archives.md) 使用独立 `log_archive` 配置从 MinIO 按需读取清单和日志，不新增日志表，支持历史/软删除运行；采集端需提前上传约定格式，不安装采集器，不自动适配任意 Argo 归档桶。
+
+[Pipeline 在线终端](docs/pipeline-terminal.md) 使用公共 `internal/k8s/podexec` 直连 Kubernetes pods/exec，支持 WebSocket 输入、TTY 输出和窗口缩放。组内 `pipeline.exec` 与日志权限独立；需显式应用 `000019_pipeline_exec.sql`，机器身份需 pods/exec 的 get/create 权限。仅支持当前运行中的普通容器及镜像自带 shell，首帧复用现有 Access JWT，不新增凭据或终端表，不经过 worker；本次没有实现前端或独立调试 Pod。
 
 Pipeline 独立观测另需显式执行 `000016_pipeline_sync.sql`（本轮未执行），随 pipeline-worker 常驻运行。默认活动 Run 约 5 秒、终态约 5 分钟查询一次；`sync_concurrency=2`、`sync_qps=10` 限制每进程观测开销。操作结束/撤权不停止观测，已逻辑删除的 Run 停止对账。运行查询提供同步时间与异常原因，详情见 [KFP 状态同步](docs/pipeline-kfp.md)。
 

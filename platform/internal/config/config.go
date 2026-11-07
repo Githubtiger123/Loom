@@ -294,6 +294,8 @@ func applyEnv(c *Config) {
 	envStr(&c.Images.Path, "LOOM_IMAGES_PATH")
 	envBool(&c.Pipeline.Enabled, "LOOM_PIPELINE_ENABLED")
 	envStr(&c.Pipeline.Endpoint, "LOOM_PIPELINE_ENDPOINT")
+	envStr(&c.Pipeline.MetadataEndpoint, "LOOM_PIPELINE_METADATA_ENDPOINT")
+	envStr(&c.Pipeline.MetadataTokenFile, "LOOM_PIPELINE_METADATA_TOKEN_FILE")
 	envStr(&c.Pipeline.TokenFile, "LOOM_PIPELINE_TOKEN_FILE")
 	envStr(&c.Pipeline.ServiceAccount, "LOOM_PIPELINE_SERVICE_ACCOUNT")
 	envStr(&c.Pipeline.PipelineRoot, "LOOM_PIPELINE_ROOT")

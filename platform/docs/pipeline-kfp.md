@@ -100,7 +100,7 @@ API 的 value 仍是字符串；适配器按 schema 转成原生 JSON 值后调�
 
 ### 2.4 运行详情、节点与停止
 
-`runtime` 返回官方原始运行状态，以及节点 taskId、name、state、parentTaskId、startTime、endTime。只返回筛选后的字段，不透传任意官方 API、PodSpec、输入输出和错误体。外部读取结束后再次检查用户授权与运行身份。尚无外部 ID 时返回冲突；KFP 未配置或不可读时明确返回不可用，不把历史记录当作实时结果。
+`runtime` 保留轻量契约：官方原始运行状态及节点 taskId、name、state、parentTaskId、startTime、endTime，供原有日志/终端定位复用。新增 `dag` 与 `nodes/{nodeId}` 提供本次提交 IR 的静态结构、嵌套/循环实例、错误历史、参数值及官方 MLMD 产物元数据；不透传任意官方 API、PodSpec、连接凭据或产物文件。详见 [DAG 与节点详情](pipeline-dag.md)。外部读取结束后再次检查用户授权与运行身份。runtime 尚无外部 ID 时返回冲突；KFP 未配置或不可读时明确返回不可用，不把历史记录当作实时结果。
 
 POST `/pipeline-runs/{rid}/stop`：
 
@@ -221,6 +221,8 @@ API 与 pipeline-worker 使用同一配置。API 用于实时详情及限制混�
 不要在迁移中直接让内置 worker 接管旧引用型运行或尚在工作的外部适配器。旧任务没有本实现的提交日志和 IR 身份，需人工核验并先收敛，平台不自动猜测外部归属。
 
 ## 5. 本轮尚未覆盖
+
+Pipeline 在线终端已另外接入 Kubernetes `pods/exec`，复用节点归属解析，独立检查组内 `pipeline.exec` 和运行对象权限。不是 KFP Run API 的新命令，也不经过 worker；权限迁移、首帧 Access 认证和 WebSocket 协议见 [在线终端](pipeline-terminal.md)。不提供独立调试 Pod 或单节点运行。
 
 Experiment 管理、向官方 Pipeline/version 目录上传同步、RecurringRun 定时调度、artifact 根输入、平台扩展、多文档包、凭据引用解析、产物下载/MLMD 浏览、官方缓存管理接口、无损暂停恢复、失败节点原地 Retry、前端和集群安装不在此次主线范围。在线节点日志已独立接入 Kubernetes pods/log，需显式应用 000018_pipeline_logs.sql，详见 [公共日志组件](pod-logs.md)。[离线日志](log-archives.md) 已补 MinIO 按需读取接口，复用该权限，不增加日志索引表；采集端需先上传约定格式，编辑/删除不等待归档完成。可提交新业务运行，也可编辑清理后手动重建；不能借操作重试复用终态 KFP ID。
 

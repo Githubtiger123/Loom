@@ -13,6 +13,7 @@
 | 空间 / 用户 | 停用、恢复、安全删除；成员移除和用户禁用生成 Notebook 停止任务、保留数据并等待撤权 | 固定 Profile Owner 始终为配置中的 admin 身份；有 live ML 时先显式停止，当前不自动取消训练 |
 | Pipeline | 定义、IR 导入/版本原地编辑、修订历史、参数解析、运行快照、内置 KFP 提交/停止/删除/状态轮询、运行编辑清理后手动重建、节点详情、本地查询投影 | 需兼容客户端确定性 Run ID 的官方 KFP 与独立 pipeline-worker；只接入单文档 v2 IR 主线 |
 | Trainer | 训练规格、创建/停止/删除、分页、历史、操作单 | 外部 Trainer 适配器负责受管 runtime/code/data/output 解析和提交 |
+| Pipeline 终端 | 公共 podexec、组内 pipeline.exec、节点/空间归属校验、WebSocket 输入/输出/缩放、准入与关闭审计 | 需显式 000019 迁移及机器 pods/exec 权限；仅运行中的普通容器和镜像自带 shell，未做前端/独立调试 Pod；见 [终端](pipeline-terminal.md) |
 | Pipeline 日志 | 在线快照/follow、MinIO 离线清单与分段读取、历史和软删除 Run 授权 | 复用 pipeline.logs；无新日志表。采集端需提前上传约定格式，删除不等待归档完成；详见 [离线日志](log-archives.md) |
 | KServe | 服务、不可变修订、修改/部署/停止/删除、历史 | 外部适配器负责 model/runtime 解析、真实部署与观测 |
 | 机器执行桥 | 独立 mTLS listener、领取/续租/回填/回执、证书绑定、外部 ID、单调序号、过时目标隔离 | 不是实际适配器，不保证跨系统 exactly-once；必须按执行桥契约持久幂等并收敛迟到副作用 |
@@ -55,6 +56,7 @@ Pipeline 和 Trainer 的提交回执只代表已提交，不代表运行成功�
 | 000016_pipeline_sync.sql | 独立状态观测调度、租约、索引和同步新鲜度；不依赖操作单或原用户权限 |
 | 000017_pipeline_edit.sql | 版本原地编辑及修订历史、运行 pendingSpec/清理标记、旧执行快照和编辑权限 |
 | 000018_pipeline_logs.sql | Pipeline 在线日志独立权限及内置角色显式升级；公共 Reader 同时复用至 Notebook 日志快照 |
+| 000019_pipeline_exec.sql | Pipeline 组内终端权限，显式授予内置 owner/editor，不新增终端表 |
 
 000008 未使用，迁移器不要求编号连续。升级前停止旧认证写入者，禁止旧版认证与新版会话逻辑混跑。显式迁移后再部署新版进程，启动只检查版本和 checksum，不自动建表。既有本地用户下一次登录需改密，成功改密撤销旧会话并重新登录。
 
@@ -65,6 +67,8 @@ Notebook 独立主机配置 `auth.notebook_origin`，须为不同 hostname 的 H
 KServe 部署完成后可用机器 `/internal/v1/ml-executions/{oid}/observe` 持续回报健康，独立序号不重新开启部署操作，不允许修改外部 UID。当前 stop 合同要求适配器确认停止服务且保留原生 UID；仅支持通过删除来停用的运行环境不能虚报 STOPPED，应显式删除旧业务服务再新建。观测时间不再新鲜时不能将历史 SERVING 当成实时健康证明。
 
 ## 未包含内容
+
+Pipeline 后端已补充 [DAG 与节点详情](pipeline-dag.md)，按本次运行快照与官方 MLMD 读取结构、执行实例、错误、参数和产物元数据，不新增业务数据库表。产物下载/可视化、已删除 KFP 执行的完整 DAG 元数据归档仍未包含。
 
 前端、镜像管理接口、任意历史资源自动迁移、Trainer/KServe 实际适配器、受管引用解析、KFP Experiment/定时调度/产物下载等完整功能、网关部署、集群 RBAC 安装、MFA/自助找回、LIST/WATCH 游标均不在本轮完成范围。空闲回收也未开启：没有可信 kernel 活动源时不能根据页面访问或旧 annotation 自动停机。
 

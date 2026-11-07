@@ -23,7 +23,8 @@ type PipelinePodRef struct {
 }
 
 // ResolvePipelinePod 校验 Pod -> Workflow UID -> KFP Run 的执行归属。
-// 不提供按 namespace 任意读取日志的业务接口；非 Argo/非直接 Workflow owner 明确拒绝。
+// 不提供按 namespace 任意访问 Pod 的业务接口；日志与终端共享执行归属解析。
+// 非 Argo/非直接 Workflow owner 明确拒绝。
 func (c *Client) ResolvePipelinePod(ctx context.Context, ref PipelinePodRef) (podlog.Target, error) {
 	if !validator.IsDNS1123Label(ref.Namespace) || (ref.Pod != "" && !validator.IsSecretName(ref.Pod)) || !validator.IsCatalogID(ref.RunID) {
 		return podlog.Target{}, apperr.New(apperr.CodeConflict, "KFP 节点尚无合法 Pod 映射")
@@ -62,7 +63,7 @@ func (c *Client) ResolvePipelinePod(ctx context.Context, ref PipelinePodRef) (po
 	}
 	pod, err := c.kube.CoreV1().Pods(ref.Namespace).Get(ctx, ref.Pod, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		return podlog.Target{}, apperr.New(apperr.CodeNotFound, "Pod 已清理，在线日志不可读；离线日志需要事先归档")
+		return podlog.Target{}, apperr.New(apperr.CodeNotFound, "Pod 已清理，不能访问在线容器；日志需要事先归档")
 	}
 	if err != nil {
 		return podlog.Target{}, apperr.Wrap(apperr.CodeUnavailable, "在线 Pod 不可读；Pod 已清理时需要归档日志", err)
@@ -91,7 +92,7 @@ func (c *Client) ResolvePipelinePod(ctx context.Context, ref PipelinePodRef) (po
 		}
 		return podlog.Target{Namespace: ref.Namespace, Pod: ref.Pod, PodUID: string(pod.UID), Container: container}, nil
 	}
-	return podlog.Target{}, apperr.New(apperr.CodeConflict, "当前只支持归属可验证的 Argo Workflow Pod 日志")
+	return podlog.Target{}, apperr.New(apperr.CodeConflict, "当前只支持访问归属可验证的 Argo Workflow Pod")
 }
 
 // 仅识别本仓库 KFP v2 注入的 launcher 参数，遇到 -- 就停止；不从用户命令猜测关联。

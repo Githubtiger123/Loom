@@ -17,22 +17,26 @@ type PipelineLogReader interface {
 }
 
 func (s *Service) pipelineLogRun(ctx context.Context, actor, groupID, id uint64) (*model.PipelineRun, error) {
+	return s.pipelinePodRun(ctx, actor, groupID, id, "pipeline.logs")
+}
+
+func (s *Service) pipelinePodRun(ctx context.Context, actor, groupID, id uint64, permission string) (*model.PipelineRun, error) {
 	u, err := s.Store.User(ctx, actor, false)
 	if err != nil {
 		return nil, domainError(err)
 	}
 	if u.Status != "ACTIVE" || u.DeletedAt != nil {
-		return nil, apperr.New(apperr.CodeForbidden, "用户已停用，不能读取日志")
+		return nil, apperr.New(apperr.CodeForbidden, "用户已停用，不能访问在线容器")
 	}
 	n, err := s.PipelineRun(ctx, actor, groupID, id)
 	if err != nil {
 		return nil, err
 	}
-	if err := mlAllowed(ctx, s.Store, actor, &n.MLIdentity, "pipeline", "pipeline.logs"); err != nil {
+	if err := mlAllowed(ctx, s.Store, actor, &n.MLIdentity, "pipeline", permission); err != nil {
 		return nil, err
 	}
 	if n.Cluster != s.Cluster || n.DeletedAt != nil || n.ExecutionCleaned || n.ExternalID == nil || *n.ExternalID != n.InstanceID {
-		return nil, apperr.New(apperr.CodeConflict, "当前执行尚未就绪或已清理，不能读取在线日志")
+		return nil, apperr.New(apperr.CodeConflict, "当前执行尚未就绪或已清理，不能访问在线容器")
 	}
 	return n, nil
 }
@@ -87,30 +91,9 @@ func (s *Service) OpenPipelineTaskLogs(ctx context.Context, actor, groupID, id u
 	if err := s.pipelineLogSpace(readCtx, n); err != nil {
 		return nil, podLogReadError(err)
 	}
-	// 复用已核对 KFP Run ID/提交摘要的详情读取，拒绝用户任意指定 Pod。
-	runtime, err := s.PipelineRunRuntime(readCtx, actor, groupID, id)
+	ref, err := s.pipelineTaskPodRef(readCtx, actor, groupID, id, n, taskID, options.Container)
 	if err != nil {
 		return nil, err
-	}
-	pod := ""
-	executionID := ""
-	found := false
-	for _, task := range runtime.Tasks {
-		if task.ID == taskID {
-			if found {
-				return nil, apperr.New(apperr.CodeConflict, "KFP 返回重复节点 ID")
-			}
-			found = true
-			pod = task.PodName
-			executionID = task.ExecutionID
-		}
-	}
-	if !found || (pod == "" && executionID == "") {
-		return nil, apperr.New(apperr.CodeConflict, "节点尚未分配 Pod、命中缓存或为逻辑节点，没有可读取的在线容器")
-	}
-	ref := k8s.PipelinePodRef{Namespace: n.Namespace, RunID: n.InstanceID, Pod: pod, Container: options.Container}
-	if pod == "" {
-		ref.ExecutionID = executionID
 	}
 	target, err := s.PipelineLogs.ResolvePipelinePod(readCtx, ref)
 	if err != nil {
@@ -149,4 +132,37 @@ func (s *Service) OpenPipelineTaskLogs(ctx context.Context, actor, groupID, id u
 	}
 	keep = true
 	return session, nil
+}
+
+// Both logs and exec use KFP's verified task mapping, never an arbitrary client Pod name.
+func (s *Service) pipelineTaskPodRef(ctx context.Context, actor, groupID, id uint64, n *model.PipelineRun, taskID, container string) (k8s.PipelinePodRef, error) {
+	var empty k8s.PipelinePodRef
+	if !validator.IsIdempotencyKey(taskID) {
+		return empty, apperr.New(apperr.CodeInvalid, "taskId 无效")
+	}
+	runtime, err := s.PipelineRunRuntime(ctx, actor, groupID, id)
+	if err != nil {
+		return empty, err
+	}
+	pod := ""
+	executionID := ""
+	found := false
+	for _, task := range runtime.Tasks {
+		if task.ID == taskID {
+			if found {
+				return empty, apperr.New(apperr.CodeConflict, "KFP 返回重复节点 ID")
+			}
+			found = true
+			pod = task.PodName
+			executionID = task.ExecutionID
+		}
+	}
+	if !found || (pod == "" && executionID == "") {
+		return empty, apperr.New(apperr.CodeConflict, "节点尚未分配 Pod、命中缓存或为逻辑节点，没有可访问的在线容器")
+	}
+	ref := k8s.PipelinePodRef{Namespace: n.Namespace, RunID: n.InstanceID, Pod: pod, Container: container}
+	if pod == "" {
+		ref.ExecutionID = executionID
+	}
+	return ref, nil
 }

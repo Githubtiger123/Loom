@@ -93,6 +93,8 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "POST /api/v1/groups/{gid}/pipeline-runs/{rid}/start", api.StartPipelineRun)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/attempts", api.PipelineRunAttempts)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/runtime", api.PipelineRunRuntime)
+	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/dag", api.PipelineRunDAG)
+	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/nodes/{nodeId}", api.PipelineRunNode)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/tasks/{taskId}/logs", api.PipelineTaskLogs)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/log-archives", api.PipelineLogArchives)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/log-archives/{entryId}", api.PipelineLogArchiveContent)
@@ -124,6 +126,9 @@ func New(api *handler.API) http.Handler {
 
 	// 认证入口不经过业务 Bearer 校验，否则登录/刷新会形成认证循环。
 	root := http.NewServeMux()
+	// Browser WebSocket sends the existing Access JWT in its first frame; this
+	// endpoint owns that authentication and cannot pass through Bearer-header middleware.
+	root.HandleFunc("GET /api/v1/groups/{gid}/pipeline-runs/{rid}/tasks/{taskId}/terminal", api.PipelineTaskTerminal)
 	root.HandleFunc("POST /api/v1/auth/login", api.Login)
 	root.HandleFunc("POST /api/v1/auth/refresh", api.Refresh)
 	root.HandleFunc("POST /api/v1/auth/logout", api.Logout)

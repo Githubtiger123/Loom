@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/githubtiger123/loom/platform/internal/apperr"
 	"github.com/githubtiger123/loom/platform/internal/dto"
 	"github.com/githubtiger123/loom/platform/internal/infra/kfp"
 	"github.com/githubtiger123/loom/platform/internal/model"
@@ -415,56 +414,16 @@ type PipelineRuntimeTask struct {
 }
 
 func (s *Service) PipelineRunRuntime(ctx context.Context, actor, groupID, id uint64) (*PipelineRuntime, error) {
-	n, err := s.PipelineRun(ctx, actor, groupID, id)
+	n, run, details, err := s.readPipelineObservation(ctx, actor, groupID, id)
 	if err != nil {
 		return nil, err
-	}
-	if s.PipelineClient == nil {
-		return nil, apperr.New(apperr.CodeUnavailable, "官方 KFP 后端尚未配置")
-	}
-	if n.ExecutionCleaned {
-		return nil, apperr.New(apperr.CodeConflict, "旧执行已清理，当前配置待手动启动；旧记录请查询 attempts/history")
-	}
-	if n.ExternalID == nil {
-		return nil, apperr.New(apperr.CodeConflict, "运行尚未取得 KFP Run ID，请先查询操作进度")
-	}
-	journal := &pipelineSubmission{}
-	if err := s.DB.WithContext(ctx).Where("instance_id = ?", n.InstanceID).First(journal).Error; err != nil {
-		return nil, domainError(err)
-	}
-	run, err := s.PipelineClient.GetRun(ctx, *n.ExternalID)
-	if err != nil {
-		return nil, apperr.New(apperr.CodeUnavailable, "无法读取 KFP 运行详情")
-	}
-	if journal.ExternalID == nil || *journal.ExternalID != *n.ExternalID || run.ID != *n.ExternalID || run.Namespace != n.Namespace || run.Name != journal.RunName || run.Description != "loom:v1:"+n.InstanceID+":"+journal.RequestHash {
-		return nil, apperr.New(apperr.CodeConflict, "KFP 运行身份不匹配")
-	}
-	var details struct {
-		Tasks []struct {
-			ID          string      `json:"task_id"`
-			Name        string      `json:"display_name"`
-			PodName     string      `json:"pod_name"`
-			ExecutionID json.Number `json:"execution_id"`
-			State       string      `json:"state"`
-			ParentID    string      `json:"parent_task_id"`
-			StartTime   string      `json:"start_time"`
-			EndTime     string      `json:"end_time"`
-		} `json:"task_details"`
-	}
-	if len(run.Details) != 0 && json.Unmarshal(run.Details, &details) != nil {
-		return nil, apperr.New(apperr.CodeUnavailable, "KFP 节点详情格式无效")
 	}
 	out := &PipelineRuntime{ExternalID: run.ID, State: run.State, CreatedAt: run.CreatedAt, FinishedAt: run.FinishedAt, Tasks: []PipelineRuntimeTask{}}
 	for _, task := range details.Tasks {
 		out.Tasks = append(out.Tasks, PipelineRuntimeTask{ID: task.ID, Name: task.Name, PodName: task.PodName, ExecutionID: task.ExecutionID.String(), State: task.State, ParentID: task.ParentID, StartTime: task.StartTime, EndTime: task.EndTime})
 	}
-	// 外部读取期间可能撤权或变更实例；返回前重新授权并核对身份。
-	fresh, err := s.PipelineRun(ctx, actor, groupID, id)
-	if err != nil {
+	if err := s.checkPipelineObservation(ctx, actor, n); err != nil {
 		return nil, err
-	}
-	if fresh.InstanceID != n.InstanceID || fresh.Revision != n.Revision || fresh.ExternalID == nil || *fresh.ExternalID != *n.ExternalID {
-		return nil, apperr.New(apperr.CodeConflict, "运行已变化，请刷新")
 	}
 	return out, nil
 }

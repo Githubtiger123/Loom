@@ -95,6 +95,10 @@ pipeline:
   # 复用官方 KFP v2 后端，执行角色使用 -cmd pipeline-worker；不改 Notebook worker。
   enabled: false
   endpoint: "http://ml-pipeline.kubeflow.svc.cluster.local:8888"
+  # 官方 MLMD 的 grpc-web 入口；部署命名不同请修改。留空时 DAG 仍可读静态结构和 KFP 状态，元数据明确标记未配置。
+  metadata_endpoint: "http://metadata-envoy-service.kubeflow.svc.cluster.local:9090"
+  # 需要鉴权的机器代理可挂载专用 token；为空时仅用于受网络策略保护的集群内 Envoy。
+  metadata_token_file: ""
   # 由运维挂载面向 KFP 的 projected ServiceAccount token；不使用 Loom Access JWT。
   token_file: "/var/run/secrets/kfp/token"
   service_account: "default-editor"

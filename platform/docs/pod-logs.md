@@ -69,4 +69,4 @@ Authorization: Bearer <access-token>
 
 API 机器身份需要目标空间的 `pods: get`、`pods/log: get`、`workflows.argoproj.io: get`，以及现有空间核验所需的 `namespaces: get`；KFP 缺失 pod_name 的兼容路径还需要 `pods: list`。仅为读日志不需要 pods 的 create/delete/exec 权限。本次不修改真实集群 RBAC、不安装组件。
 
-在线终端、独立调试 Pod、单节点执行和前端仍待后续实现。离线日志使用 MinIO manifest 和不可变文本文件按需读取，不新增日志索引表。采集端需在 Pod 存在时提前归档；当前清理不等待上传，不保证删除前归档完成。旧 attempts 快照并不等于保留旧日志；在线接口不会在 Pod 消失后伪造空日志，也不自动回退归档。
+[在线终端](pipeline-terminal.md) 已独立实现，使用组内 pipeline.exec，不要求日志权限，也不将其当作只读能力。独立调试 Pod、单节点执行和前端仍待后续实现。离线日志使用 MinIO manifest 和不可变文本文件按需读取，不新增日志索引表。采集端需在 Pod 存在时提前归档；当前清理不等待上传，不保证删除前归档完成。旧 attempts 快照并不等于保留旧日志；在线接口不会在 Pod 消失后伪造空日志，也不自动回退归档。

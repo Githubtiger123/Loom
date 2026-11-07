@@ -22,6 +22,9 @@ type Pipeline struct {
 	TerminalSyncInterval Duration `yaml:"terminal_sync_interval"`
 	SyncConcurrency      int      `yaml:"sync_concurrency"`
 	SyncQPS              int      `yaml:"sync_qps"`
+	// Official metadata-envoy grpc-web endpoint, not the KFP apiserver URL.
+	MetadataEndpoint  string `yaml:"metadata_endpoint"`
+	MetadataTokenFile string `yaml:"metadata_token_file"`
 }
 
 func (p Pipeline) Validate() error {
@@ -34,6 +37,12 @@ func (p Pipeline) Validate() error {
 	}
 	if !validator.IsDNS1123Label(p.ServiceAccount) || strings.TrimSpace(p.TokenFile) == "" {
 		return fmt.Errorf("pipeline 需配置有效的 service_account 与 token_file，不使用 Loom 用户 JWT 访问 KFP")
+	}
+	if p.MetadataEndpoint != "" {
+		metadata, err := url.Parse(p.MetadataEndpoint)
+		if err != nil || metadata.Host == "" || (metadata.Scheme != "http" && metadata.Scheme != "https") || metadata.User != nil || metadata.RawQuery != "" || metadata.Fragment != "" {
+			return fmt.Errorf("pipeline.metadata_endpoint 必须是无凭据和查询参数的 HTTP(S) metadata-envoy 地址")
+		}
 	}
 	if p.Timeout.Std() < time.Second || p.Timeout.Std() > 20*time.Second || p.PollInterval.Std() < 5*time.Second || p.PollInterval.Std() > time.Minute {
 		return fmt.Errorf("pipeline.timeout 须为 1–20s，poll_interval 须为 5–60s")

@@ -27,19 +27,21 @@ import (
 
 type actorKey struct{}
 type API struct {
-	service    *service.Service
-	identity   config.Identity
-	log        *slog.Logger
-	trusted    []netip.Prefix
-	auth       *authn.Manager
-	logStreams logStreamLimiter
+	service         *service.Service
+	identity        config.Identity
+	log             *slog.Logger
+	trusted         []netip.Prefix
+	auth            *authn.Manager
+	logStreams      logStreamLimiter
+	terminalStreams logStreamLimiter
+	terminalPending chan struct{}
 }
 
 // Endpoint 是请求处理函数，不负责注册路由。
 type Endpoint func(context.Context, *model.User, *http.Request) (any, error)
 
 func New(s *service.Service, identity config.Identity, logger *slog.Logger, managers ...*authn.Manager) *API {
-	a := &API{service: s, identity: identity, log: logger}
+	a := &API{service: s, identity: identity, log: logger, terminalPending: make(chan struct{}, 64)}
 	if len(managers) > 0 {
 		a.auth = managers[0]
 	}

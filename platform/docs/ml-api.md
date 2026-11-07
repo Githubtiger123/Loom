@@ -31,7 +31,10 @@
 | POST | `/pipeline-runs/{rid}/start` | 手动创建新的执行实例 |
 | GET | `/pipeline-runs/{rid}/attempts` | 已清理的旧执行快照 |
 | GET | `/pipeline-runs/{rid}/runtime` | 官方实时运行及经筛选的节点状态 |
+| GET | `/pipeline-runs/{rid}/dag` | 本次 Run 快照的 DAG、依赖边及实时执行实例 |
+| GET | `/pipeline-runs/{rid}/nodes/{nodeId}` | 静态或执行节点详情、参数值、产物元数据；见 [DAG 契约](pipeline-dag.md) |
 | GET | `/pipeline-runs/{rid}/tasks/{taskId}/logs` | 节点在线容器日志快照 / follow 流 |
+| GET (WebSocket) | `/pipeline-runs/{rid}/tasks/{taskId}/terminal` | 在线终端；组内 pipeline.exec + 运行对象权限，首帧认证/输入/缩放见 [终端协议](pipeline-terminal.md) |
 | GET | `/pipeline-runs/{rid}/log-archives` | 当前或指定历史 instanceId 的 MinIO 归档清单，需 pipeline.logs |
 | GET | `/pipeline-runs/{rid}/log-archives/{entryId}` | 指定 instanceId / etag，按 offset / limitBytes 分段读取离线日志，详见 [离线日志](log-archives.md) |
 | POST | `/pipeline-runs/{rid}/stop` | 请求停止 |
