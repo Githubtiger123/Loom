@@ -5,9 +5,21 @@ The HTTP bridge itself does not invoke KFP, Trainer, or KServe, or resolve/fetch
 user references. A separate built-in `pipeline-worker` now calls official KFP
 v2 APIs using the same durable claim/renew/report service contract in-process.
 See [KFP integration](../../docs/pipeline-kfp.md). With `pipeline.enabled=true`,
-Pipeline submit/stop claims are reserved for that worker; external certificate
+Pipeline submit/stop/delete/edit claims are reserved for that worker; external certificate
 peers must omit those actions. Trainer/KServe still require external adapters.
 Do not mix old external Pipeline writers with the built-in adapter during rollout.
+
+The same pipeline-worker also runs an independent read-only observer with
+persistent per-Run scheduling and leases (`000016_pipeline_sync.sql`). It keeps
+observing after operation completion/failure or requester revocation, without
+creating resources or reopening execution receipts. It uses the shared target
+lock, checks namespace/Run identity, and exposes sync freshness separately.
+
+Pipeline edits now use an internal `pipeline.run.edit` cleanup command carrying
+the old execution snapshot plus pendingPipelineRun. Only verified external
+absence completes the edit; it saves the pending config and leaves the business
+Run STOPPED, not deleted. Manual start rotates instanceId and KFP Run ID, retaining
+old receipts/attempt snapshots. See [edit/rebuild](../../docs/pipeline-edit.md).
 
 ## Private routes (registered in internal/route/route.go)
 

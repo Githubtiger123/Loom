@@ -35,6 +35,7 @@ type Run struct {
 }
 
 type CreateRun struct {
+	ID             string          `json:"run_id"`
 	Name           string          `json:"display_name"`
 	Namespace      string          `json:"namespace"`
 	Description    string          `json:"description"`
@@ -52,11 +53,6 @@ type RuntimeConfig struct {
 type Error struct{ Status int }
 
 func (e *Error) Error() string { return fmt.Sprintf("KFP HTTP status %d", e.Status) }
-
-// IdentityError 表示查询结果无法唯一绑定，不能按普通网络故障继续处理。
-type IdentityError struct{}
-
-func (*IdentityError) Error() string { return "KFP run identity ambiguous or mismatched" }
 
 func New(endpoint, tokenFile string, timeout time.Duration) *Client {
 	return &Client{endpoint: strings.TrimRight(endpoint, "/"), tokenFile: tokenFile,
@@ -134,25 +130,9 @@ func (c *Client) TerminateRun(ctx context.Context, id string) error {
 	return c.request(ctx, http.MethodPost, "/runs/"+url.PathEscape(id)+":terminate", nil, struct{}{}, nil)
 }
 
-// FindRun 用确定性名称恢复提交回执；零结果不证明超时的 CreateRun 没有生效。
-func (c *Client) FindRun(ctx context.Context, namespace, name string) (*Run, error) {
-	filter, _ := json.Marshal(map[string]any{"predicates": []any{map[string]any{"key": "display_name", "operation": "EQUALS", "string_value": name}}})
-	var out struct {
-		Runs []Run  `json:"runs"`
-		Next string `json:"next_page_token"`
+func (c *Client) DeleteRun(ctx context.Context, id string) error {
+	if !validator.IsCatalogID(id) {
+		return fmt.Errorf("KFP run ID invalid")
 	}
-	err := c.request(ctx, http.MethodGet, "/runs", url.Values{"namespace": {namespace}, "page_size": {"100"}, "filter": {string(filter)}}, nil, &out)
-	if err != nil {
-		return nil, err
-	}
-	if out.Next != "" || len(out.Runs) > 1 {
-		return nil, &IdentityError{}
-	}
-	if len(out.Runs) == 0 {
-		return nil, nil
-	}
-	if out.Runs[0].Name != name || out.Runs[0].Namespace != namespace {
-		return nil, &IdentityError{}
-	}
-	return &out.Runs[0], nil
+	return c.request(ctx, http.MethodDelete, "/runs/"+url.PathEscape(id), nil, nil, nil)
 }

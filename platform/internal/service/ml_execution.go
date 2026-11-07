@@ -120,8 +120,10 @@ func mlExecutionCommand(o *model.Operation) (*MLCommand, error) {
 	switch c.Action {
 	case MLPipelineSubmit:
 		target, desired = "pipeline_run", "RUNNING"
-	case MLPipelineStop:
+	case MLPipelineStop, MLPipelineEdit:
 		target, desired = "pipeline_run", "STOPPED"
+	case MLPipelineDelete:
+		target, desired = "pipeline_run", "DELETED"
 	case MLTrainerCreate:
 		target, desired = "trainer_job", "RUNNING"
 	case MLTrainerStop:
@@ -142,6 +144,7 @@ func mlExecutionCommand(o *model.Operation) (*MLCommand, error) {
 		target, desired = "kserve_service", "DELETED"
 	}
 	if o.TargetType != target || c.DesiredState != desired ||
+		(c.Action == MLPipelineEdit) != (c.PendingPipelineRun != nil) ||
 		(target == "pipeline_run") != (c.PipelineRun != nil) ||
 		(target == "trainer_job") != (c.TrainerJob != nil) ||
 		(target == "kserve_service") != (c.KServe != nil) {
@@ -219,7 +222,7 @@ func mlExecutionGrant(ctx context.Context, st *repository.Store, o *model.Operat
 		return nil, mlExecutionConflict()
 	}
 	switch c.Action {
-	case MLPipelineStop, MLTrainerStop, MLTrainerDelete, MLKServeStop, MLKServeDelete:
+	case MLPipelineStop, MLPipelineDelete, MLPipelineEdit, MLTrainerStop, MLTrainerDelete, MLKServeStop, MLKServeDelete:
 		return g, nil
 	}
 	if g.Status != "ACTIVE" || c.RequestedBy == 0 || c.RequestedBy != o.ActorID {
@@ -264,7 +267,7 @@ func (s *Service) ClaimMLExecution(ctx context.Context, peer string, in dto.Clai
 	}
 	seen := map[string]bool{}
 	for _, action := range in.Actions {
-		if s.PipelineClient != nil && (action == string(MLPipelineSubmit) || action == string(MLPipelineStop)) && peer != s.PipelinePeer() {
+		if s.PipelineClient != nil && (action == string(MLPipelineSubmit) || action == string(MLPipelineStop) || action == string(MLPipelineDelete) || action == string(MLPipelineEdit)) && peer != s.PipelinePeer() {
 			return nil, apperr.New(apperr.CodeConflict, "Pipeline 已由内置 KFP worker 管理，不允许外部执行器同时领取")
 		}
 		if !mlExecutionAction(action) || seen[action] {
@@ -522,6 +525,7 @@ func mlObservation(c *MLCommand, n *mlObject, e *mlExecution, in dto.ReportMLExe
 	}
 	if previous == "SUCCEEDED" || previous == "FAILED" || previous == "DELETED" || previous == "STOPPED" {
 		if state != previous && !(c.DesiredState == "DELETED" && state == "DELETED" && in.ResourceAbsent) &&
+			!(c.Action == MLPipelineEdit && state == "STOPPED" && in.ResourceAbsent) &&
 			!(c.KServe != nil && c.DesiredState != "DELETED" && n.state.AppliedRevision < c.Revision && e.LastObservedState == nil) {
 			return "", "", mlExecutionConflict()
 		}
@@ -544,6 +548,13 @@ func mlObservation(c *MLCommand, n *mlObject, e *mlExecution, in dto.ReportMLExe
 		default:
 			return "RUNNING", "PENDING", nil
 		}
+	}
+	if c.Action == MLPipelineEdit && !in.ResourceAbsent {
+		// 旧 Run 已 CANCELED/SUCCEEDED/FAILED 仍不算编辑完成，必须确认外部删除。
+		if state == "UNKNOWN" || state == "SUBMITTED" {
+			return "RUNNING", "PENDING", nil
+		}
+		return "RUNNING", state, nil
 	}
 	switch state {
 	case "FAILED":
@@ -609,6 +620,12 @@ func (s *Service) ReportMLExecution(ctx context.Context, peer, id string, in dto
 			if err != nil {
 				return err
 			}
+			if c.Action == MLPipelineEdit && in.ObservedState == "STOPPED" && in.ResourceAbsent {
+				// 先归档旧执行状态/配置，再把业务对象推进到待启动的新配置。
+				if err := applyPipelineEdit(ctx, st, c, n, domain, in.ExternalID); err != nil {
+					return err
+				}
+			}
 			observed := in.ObservedState
 			if observed == "SUBMITTED" {
 				// SUBMITTED is an adapter receipt; domain schemas intentionally
@@ -618,7 +635,7 @@ func (s *Service) ReportMLExecution(ctx context.Context, peer, id string, in dto
 			domain["observed_state"], domain["observed_at"], domain["status"] = observed, gorm.Expr("UTC_TIMESTAMP(3)"), domainStatus
 			n.state.ObservedState, n.state.Status = observed, domainStatus
 			e.LastObservedState = &in.ObservedState
-			// 停止与自然失败竞态时仍记录已确认的终态 revision，允许后续归档；
+			// 停止与自然失败竞态时仍记录已确认的终态 revision，允许后续删除；
 			// 这里只接受资源 FAILED 观测，不包括传输/策略的执行失败。
 			if (c.DesiredState == "RUNNING" && in.ExternalID != "" && observed != "UNKNOWN") || opStatus == "SUCCEEDED" ||
 				(c.PipelineRun != nil && observed == "FAILED" && in.ExternalID != "") {

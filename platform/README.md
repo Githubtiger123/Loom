@@ -38,7 +38,7 @@
 - Notebook worker 已领取创建/启停/修改/删除任务，核对 UID、revision、租约与实例身份；观测器采集真实状态。日志、事件、诊断与 metrics 查询受对象权限及 UID 链约束，不将 CR 已创建等同于实例就绪。
 - Notebook 创建支持 `serverType=jupyter/group-one/group-two`，省略时取所选镜像类型、创建后固定；类型保存到 MySQL、查询返回和执行命令，并渲染对应 CR 类型、路径重写及 RStudio 请求头。升级需显式执行 `000014_notebook_server_type.sql`。
 - 独立 `configs/images.yaml` 预置官方 Jupyter / VS Code / RStudio 七个镜像，主配置只引用路径；API/worker 启动严格加载，创建时校验类型并固定地址，目录禁用或修改不隐式换掉已有实例镜像。`GET /api/v1/groups/{gid}/notebook-images` 提供带创建权限校验的只读下拉选项与分类筛选。详见 [镜像配置](docs/notebook-images.md)。
-- Pipeline 定义/不可变版本/运行、Trainer 作业、KServe 服务/修订/操作历史。Pipeline 通过独立 pipeline-worker 接官方 KFP，使用编译 IR、固定执行 SA 和存储根路径；Trainer/KServe 通过独立 mTLS 执行桥交给外部适配器。详见 [KFP 主线](docs/pipeline-kfp.md)、[ML 业务接口](docs/ml-api.md) 与 [执行桥契约](internal/executor/README.md)。
+- Pipeline 定义/可编辑版本/修订历史/运行、Trainer 作业、KServe 服务/修订/操作历史。Pipeline 通过独立 pipeline-worker 接官方 KFP，使用编译 IR、固定执行 SA、存储根路径和与 Loom instanceId 相同的确定性 Run ID；运行状态轮询写回 Loom 本地表，删除会终止并删除 KFP Run 后确认不存在，运行编辑清理旧实例后等待手动启动。Trainer/KServe 通过独立 mTLS 执行桥交给外部适配器。详见 [KFP 主线](docs/pipeline-kfp.md)、[ML 业务接口](docs/ml-api.md) 与 [执行桥契约](internal/executor/README.md)。
 
 ## 尚未接入，不能当作已完成
 
@@ -83,9 +83,13 @@ go run ./cmd/platform -cmd=pipeline-worker -worker-concurrency=4
 
 本地认证使用 `000005_authentication.sql`（凭据及 session_version）和 `000006_auth_tokens.sql`（Access/Refresh 摘要、轮换/撤销状态及共享限流桶）。须显式迁移后部署，升级不接续旧 Redis 会话，用户需重新登录。首个本地密码通过 `-cmd=set-password -user-id=<实际ID>` 的隐藏终端输入配置，不支持匿名设置密码或将明文放在进程参数中。
 
-新增迁移包括 `000007_auth_sessions.sql`、`000009_workspace_lifecycle.sql`、`000010_ml_workloads.sql`、`000011_ml_execution.sql`、`000012_backend_permissions.sql`、`000013_ml_observation.sql`、`000014_notebook_server_type.sql` 和 `000015_pipeline_kfp.sql`。编号 000008 未使用，迁移按实际文件名排序执行，不要求连续。升级须停止旧认证写入进程再显式迁移，禁止新旧 session 写入逻辑混跑；切换内置 KFP 前也需停旧 Pipeline 外部适配器并核查未完运行。000015 保存先于外部提交的恢复日志。上述迁移本轮均未执行。
+新增迁移包括 `000007_auth_sessions.sql`、`000009_workspace_lifecycle.sql`、`000010_ml_workloads.sql`、`000011_ml_execution.sql`、`000012_backend_permissions.sql`、`000013_ml_observation.sql`、`000014_notebook_server_type.sql` 和 `000015_pipeline_kfp.sql`。编号 000008 未使用，迁移按实际文件名排序执行，不要求连续。升级须停止旧认证写入进程再显式迁移，禁止新旧 session 写入逻辑混跑；切换内置 KFP 前也需停旧 Pipeline 外部适配器、核查未完运行并确认 KFP 支持客户端确定性 Run ID。000015 扩展 Pipeline 删除状态并保存先于外部提交的恢复日志。上述迁移本轮均未执行。
 
 ## Profile 与授权执行说明
+
+Pipeline 支持版本原地编辑和运行“清理后编辑、手动重建”。显式应用新增 `000017_pipeline_edit.sql` 后，同步升级 API/worker；业务运行 ID 保留，重建换新 instanceId/KFP Run ID，旧执行快照保留。详见 [编辑接口](docs/pipeline-edit.md)。本轮未执行迁移或真实联调。
+
+Pipeline 独立观测另需显式执行 `000016_pipeline_sync.sql`（本轮未执行），随 pipeline-worker 常驻运行。默认活动 Run 约 5 秒、终态约 5 分钟查询一次；`sync_concurrency=2`、`sync_qps=10` 限制每进程观测开销。操作结束/撤权不停止观测，已逻辑删除的 Run 停止对账。运行查询提供同步时间与异常原因，详情见 [KFP 状态同步](docs/pipeline-kfp.md)。
 
 - `worker` 每约 2 秒扫描待执行任务；默认并发 4，支持 1–16；数据库最大连接数至少为并发数 + 2（建议沿用 50）。
 - 每轮外部执行最多 40 秒，单个 Kubernetes 请求最多 10 秒；租约 60 秒、约每 10 秒续租。等待派生资源时 5 秒后重新检查，不持续占用线程。

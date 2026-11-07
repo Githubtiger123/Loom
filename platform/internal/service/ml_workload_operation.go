@@ -58,6 +58,10 @@ func mlActionPermission(action string) string {
 		return "pipeline.run"
 	case MLPipelineStop:
 		return "pipeline.stop"
+	case MLPipelineDelete:
+		return "pipeline.delete"
+	case MLPipelineEdit:
+		return "pipeline.update"
 	case MLTrainerCreate, MLTrainerStop, MLTrainerDelete, MLKServeCreate, MLKServeUpdate, MLKServeDeploy, MLKServeStop, MLKServeDelete:
 		return action
 	}
@@ -72,6 +76,13 @@ func authorizeMLRetry(ctx context.Context, st *repository.Store, actor uint64, o
 	n, err := mlOperationIdentity(ctx, st, o)
 	if err != nil {
 		return err
+	}
+	if MLAction(o.Action) == MLPipelineEdit {
+		for _, extra := range []string{"pipeline.stop", "pipeline.delete"} {
+			if err := mlAllowed(ctx, st, actor, n, "pipeline", extra); err != nil {
+				return err
+			}
+		}
 	}
 	return mlAllowed(ctx, st, actor, n, mlModule(o.TargetType), permission)
 }

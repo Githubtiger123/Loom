@@ -26,16 +26,18 @@ type Pipeline struct {
 
 func (Pipeline) TableName() string { return "tb_pipeline" }
 
-// PipelineVersion has no update/delete API. Spec and digest are frozen together.
+// 版本可原地编辑；每个 revision 和 Run 已提交的快照分别保留。
 type PipelineVersion struct {
 	ID         uint64          `json:"id" gorm:"primaryKey;autoIncrement"`
 	GroupID    uint64          `json:"groupId"`
 	PipelineID uint64          `json:"pipelineId"`
 	Name       string          `json:"name"`
+	Revision   uint64          `json:"revision" gorm:"default:1"`
 	Spec       json.RawMessage `json:"spec" gorm:"type:json"`
 	SpecHash   string          `json:"specHash"`
 	CreatedBy  *uint64         `json:"createdBy"`
 	CreatedAt  time.Time       `json:"createdAt" gorm:"default:CURRENT_TIMESTAMP(3)"`
+	UpdatedAt  time.Time       `json:"updatedAt" gorm:"autoUpdateTime:false;default:CURRENT_TIMESTAMP(3)"`
 }
 
 func (PipelineVersion) TableName() string { return "tb_pipeline_version" }
@@ -61,11 +63,41 @@ type MLExecutionState struct {
 type PipelineRun struct {
 	MLIdentity
 	MLExecutionState
-	PipelineID uint64 `json:"pipelineId"`
-	VersionID  uint64 `json:"versionId"`
+	PipelineID       uint64          `json:"pipelineId"`
+	VersionID        uint64          `json:"versionId"`
+	PendingSpec      json.RawMessage `json:"pendingSpec,omitempty" gorm:"type:json"`
+	ExecutionCleaned bool            `json:"executionCleaned"`
+	// 最近一次已核验的 KFP 原始状态。失败时保留最后成功结果，并单独暴露新鲜度。
+	KFPState           *string    `json:"kfpState"`
+	KFPSyncedAt        *time.Time `json:"kfpSyncedAt"`
+	KFPSyncAttemptedAt *time.Time `json:"kfpSyncAttemptedAt"`
+	KFPSyncReason      *string    `json:"kfpSyncReason"`
 }
 
 func (PipelineRun) TableName() string { return "tb_pipeline_run" }
+
+type PipelineVersionRevision struct {
+	VersionID uint64          `json:"versionId" gorm:"primaryKey;autoIncrement:false"`
+	Revision  uint64          `json:"revision" gorm:"primaryKey;autoIncrement:false"`
+	GroupID   uint64          `json:"groupId"`
+	Spec      json.RawMessage `json:"spec" gorm:"type:json"`
+	SpecHash  string          `json:"specHash"`
+	CreatedBy *uint64         `json:"createdBy"`
+	CreatedAt time.Time       `json:"createdAt" gorm:"default:CURRENT_TIMESTAMP(3)"`
+}
+
+func (PipelineVersionRevision) TableName() string { return "tb_pipeline_version_revision" }
+
+type PipelineRunAttempt struct {
+	InstanceID string          `json:"instanceId" gorm:"primaryKey"`
+	RunID      uint64          `json:"runId"`
+	Revision   uint64          `json:"revision"`
+	GroupID    uint64          `json:"groupId"`
+	Snapshot   json.RawMessage `json:"snapshot" gorm:"type:json"`
+	CreatedAt  time.Time       `json:"createdAt" gorm:"default:CURRENT_TIMESTAMP(3)"`
+}
+
+func (PipelineRunAttempt) TableName() string { return "tb_pipeline_run_attempt" }
 
 type TrainerJob struct {
 	MLIdentity

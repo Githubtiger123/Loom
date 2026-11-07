@@ -22,8 +22,8 @@ Notebook 停止任务、成员访问 none；执行器确认后才变 DISABLED。
 
 默认拒绝非空空间删除，包括未删除 Notebook、目录、历史未解除 PVC 引用、未释放预算、
 Pipeline 定义/运行、训练、推理记录。历史版本、执行回执、审计不会被顺带删除。
-Pipeline 运行须先确认终态并归档，再归档其定义；Trainer、KServe 须通过各自删除接口处置。
-归档不删除外部 KFP 记录，也不能靠删 namespace 绕过。执行器还须完整检查原生资源，未知对象、PVC、运行任务、
+Pipeline 运行须先通过运行 DELETE 终止并删除 KFP Run、确认 Loom 已写 DELETED，再归档其定义；Trainer、KServe 须通过各自删除接口处置。
+Pipeline 定义归档不直接操作外部资源，也不能靠删 namespace 绕过运行删除。执行器还须完整检查原生资源，未知对象、PVC、运行任务、
 身份/ownerReference 不匹配、无法完整列举均阻断。禁止强拆未知 finalizer。
 按 UID 前置条件删除 Profile，namespace 确认消失后才写 DELETED/deleted_at。
 

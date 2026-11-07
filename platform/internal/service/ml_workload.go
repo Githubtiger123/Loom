@@ -13,6 +13,7 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/rbac"
 	"github.com/githubtiger123/loom/platform/internal/repository"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type MLAction string
@@ -20,6 +21,8 @@ type MLAction string
 const (
 	MLPipelineSubmit MLAction = "pipeline.run.submit"
 	MLPipelineStop   MLAction = "pipeline.run.stop"
+	MLPipelineDelete MLAction = "pipeline.run.delete"
+	MLPipelineEdit   MLAction = "pipeline.run.edit"
 	MLTrainerCreate  MLAction = "trainer.create"
 	MLTrainerStop    MLAction = "trainer.stop"
 	MLTrainerDelete  MLAction = "trainer.delete"
@@ -31,30 +34,33 @@ const (
 )
 
 // MLCommand is the versioned adapter contract. Each action has exactly one typed
-// branch. Ref resolution, code/package validation and runtime policy are adapter
+// resource branch; Pipeline edit additionally carries pendingPipelineRun, which
+// cannot be applied until the old execution is confirmed absent.
+// Ref resolution, code/package validation and runtime policy are adapter
 // responsibilities and MUST complete before side effects. No user URL is fetched.
 type MLCommand struct {
-	SchemaVersion    int                  `json:"schemaVersion"`
-	Action           MLAction             `json:"action"`
-	ResourceID       uint64               `json:"resourceId"`
-	GroupID          uint64               `json:"groupId"`
-	CreatedBy        *uint64              `json:"createdBy"`
-	RequestedBy      uint64               `json:"requestedBy"`
-	InstanceID       string               `json:"instanceId"`
-	Cluster          string               `json:"cluster"`
-	Namespace        string               `json:"namespace"`
-	Name             string               `json:"name"`
-	ExternalID       *string              `json:"externalId"`
-	Revision         uint64               `json:"revision"`
-	DesiredState     string               `json:"desiredState"`
-	ConfigRevisionID uint64               `json:"configRevisionId,omitempty"`
-	PipelineRun      *dto.PipelineRunSpec `json:"pipelineRun,omitempty"`
-	TrainerJob       *dto.TrainerJobSpec  `json:"trainerJob,omitempty"`
-	KServe           *dto.KServeSpec      `json:"kserve,omitempty"`
+	SchemaVersion      int                  `json:"schemaVersion"`
+	Action             MLAction             `json:"action"`
+	ResourceID         uint64               `json:"resourceId"`
+	GroupID            uint64               `json:"groupId"`
+	CreatedBy          *uint64              `json:"createdBy"`
+	RequestedBy        uint64               `json:"requestedBy"`
+	InstanceID         string               `json:"instanceId"`
+	Cluster            string               `json:"cluster"`
+	Namespace          string               `json:"namespace"`
+	Name               string               `json:"name"`
+	ExternalID         *string              `json:"externalId"`
+	Revision           uint64               `json:"revision"`
+	DesiredState       string               `json:"desiredState"`
+	ConfigRevisionID   uint64               `json:"configRevisionId,omitempty"`
+	PipelineRun        *dto.PipelineRunSpec `json:"pipelineRun,omitempty"`
+	PendingPipelineRun *dto.PipelineRunSpec `json:"pendingPipelineRun,omitempty"`
+	TrainerJob         *dto.TrainerJobSpec  `json:"trainerJob,omitempty"`
+	KServe             *dto.KServeSpec      `json:"kserve,omitempty"`
 }
 
 func MLExecutorActions() []string {
-	return []string{string(MLPipelineSubmit), string(MLPipelineStop), string(MLTrainerCreate), string(MLTrainerStop), string(MLTrainerDelete), string(MLKServeCreate), string(MLKServeUpdate), string(MLKServeDeploy), string(MLKServeStop), string(MLKServeDelete)}
+	return []string{string(MLPipelineSubmit), string(MLPipelineStop), string(MLPipelineDelete), string(MLPipelineEdit), string(MLTrainerCreate), string(MLTrainerStop), string(MLTrainerDelete), string(MLKServeCreate), string(MLKServeUpdate), string(MLKServeDeploy), string(MLKServeStop), string(MLKServeDelete)}
 }
 
 // mlObject is an in-memory helper only; the three domain resources have separate
@@ -161,6 +167,12 @@ func queueML(ctx context.Context, st *repository.Store, o *model.Operation, n *m
 		if err := json.Unmarshal(n.state.RequestedSpec, c.PipelineRun); err != nil {
 			return err
 		}
+		if c.Action == MLPipelineEdit {
+			c.PendingPipelineRun = &dto.PipelineRunSpec{}
+			if err := json.Unmarshal(n.row.(*model.PipelineRun).PendingSpec, c.PendingPipelineRun); err != nil {
+				return err
+			}
+		}
 	case "trainer_job":
 		c.TrainerJob = &dto.TrainerJobSpec{}
 		if err := json.Unmarshal(n.state.RequestedSpec, c.TrainerJob); err != nil {
@@ -238,6 +250,9 @@ func (s *Service) CreatePipelineVersion(ctx context.Context, actor, groupID, id 
 			if err := st.DB.WithContext(ctx).Create(v).Error; err != nil {
 				return err
 			}
+			if err := savePipelineVersionRevision(ctx, st, v, actor); err != nil {
+				return err
+			}
 			nextRevision := p.Revision + 1
 			if err := st.UpdateML(ctx, p, groupID, id, p.Revision, map[string]any{"revision": nextRevision}); err != nil {
 				return err
@@ -268,6 +283,9 @@ func (s *Service) SubmitPipelineRun(ctx context.Context, actor, groupID, pipelin
 			if err != nil {
 				return err
 			}
+			if in.VersionRevision != 0 && in.VersionRevision != v.Revision {
+				return apperr.New(apperr.CodeConflict, "Pipeline 版本已被编辑，请刷新")
+			}
 			var version dto.PipelineVersionSpec
 			if err := json.Unmarshal(v.Spec, &version); err != nil {
 				return err
@@ -279,7 +297,7 @@ func (s *Service) SubmitPipelineRun(ctx context.Context, actor, groupID, pipelin
 			if err != nil {
 				return err
 			}
-			b, err := json.Marshal(dto.PipelineRunSpec{PipelineID: pipelineID, VersionID: v.ID, PipelineVersionSpec: version, Values: values})
+			b, err := json.Marshal(dto.PipelineRunSpec{PipelineID: pipelineID, VersionID: v.ID, VersionRevision: v.Revision, PipelineVersionSpec: version, Values: values})
 			if err != nil {
 				return err
 			}
@@ -372,6 +390,9 @@ func saveMLIntent(ctx context.Context, st *repository.Store, o *model.Operation,
 	n.state.Status, n.state.StatusReason, n.state.LastOperationID = "PENDING", nil, &o.ID
 	fields := map[string]any{"revision": n.state.Revision, "status": "PENDING", "status_reason": nil, "last_operation_id": o.ID,
 		"desired_state": n.state.DesiredState, "requested_spec": string(n.state.RequestedSpec)}
+	if o.TargetType == "pipeline_run" {
+		fields["sync_next_at"] = gorm.Expr("UTC_TIMESTAMP(3)")
+	}
 	if n.configID != nil {
 		fields["config_revision_id"] = *n.configID
 	}
@@ -444,6 +465,12 @@ func (s *Service) changeMLState(ctx context.Context, actor, groupID, id uint64, 
 			}
 			if desired == "STOPPED" && target != "kserve_service" && (n.state.ObservedState == "SUCCEEDED" || n.state.ObservedState == "FAILED") {
 				return apperr.New(apperr.CodeConflict, "作业已经结束，不可再停止；历史保持终态")
+			}
+			if target == "pipeline_run" {
+				// 显式停止/删除替代编辑时取消未应用的新配置。
+				if err := st.DB.WithContext(ctx).Model(n.row).Where("id = ?", id).Update("pending_spec", nil).Error; err != nil {
+					return err
+				}
 			}
 			n.state.DesiredState = desired
 			return saveMLIntent(ctx, st, o, n)

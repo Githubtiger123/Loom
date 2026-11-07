@@ -11,6 +11,7 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/apperr"
 	"github.com/githubtiger123/loom/platform/internal/dto"
 	"github.com/githubtiger123/loom/platform/internal/infra/kfp"
+	"github.com/githubtiger123/loom/platform/internal/model"
 	"github.com/githubtiger123/loom/platform/internal/repository"
 	"github.com/githubtiger123/loom/platform/internal/utils/validator"
 	"github.com/google/uuid"
@@ -68,11 +69,8 @@ func (s *Service) ExecutePipelineClaim(ctx context.Context, claim *MLExecutionCl
 			outcome = "FAILED"
 		}
 	}
-	var identity *kfp.IdentityError
 	var response *kfp.Error
-	if errors.As(err, &identity) {
-		reason, outcome = "IDENTITY_CONFLICT", "FAILED"
-	} else if errors.As(err, &response) && response.Status == 404 {
+	if errors.As(err, &response) && response.Status == 404 {
 		reason = "RESOURCE_NOT_FOUND"
 	}
 	// 失去授权/租约时 Report 自身会拒绝；不得绕过 fence 写运行状态。
@@ -89,7 +87,7 @@ func (s *Service) ExecutePipelineClaim(ctx context.Context, claim *MLExecutionCl
 
 func (s *Service) executePipelineClaim(ctx context.Context, claim *MLExecutionClaim) error {
 	c := &claim.Command
-	if c.PipelineRun == nil || (c.Action != MLPipelineSubmit && c.Action != MLPipelineStop) {
+	if c.PipelineRun == nil || (c.Action != MLPipelineSubmit && c.Action != MLPipelineStop && c.Action != MLPipelineDelete && c.Action != MLPipelineEdit) {
 		return pipelineProblem("REFERENCE_INVALID", true)
 	}
 	lock, err := repository.TargetLock(ctx, s.DB, c.Cluster, "pipeline_run", fmt.Sprint(c.ResourceID))
@@ -110,6 +108,18 @@ func (s *Service) executePipelineClaim(ctx context.Context, claim *MLExecutionCl
 	if err := s.PipelineVerifier.VerifyPipelineSpace(ctx, claim); err != nil {
 		return err
 	}
+	// 已完成编辑清理的业务运行再次编辑/删除，不拿新配置去比对旧提交摘要。
+	current, err := s.Store.PipelineRun(ctx, c.GroupID, c.ResourceID, false)
+	if err != nil {
+		return err
+	}
+	if current.ExecutionCleaned && current.InstanceID == c.InstanceID && c.Action != MLPipelineSubmit {
+		id := ""
+		if claim.ExternalID != nil {
+			id = *claim.ExternalID
+		}
+		return s.reportPipelineRun(ctx, claim, nil, pipelineAbsentState(c.Action), true, id)
+	}
 	spec := c.PipelineRun
 	canonical, err := canonicalPipelineIR(spec.PipelineSpec)
 	if err != nil || mlHash(canonical) != spec.PackageDigest {
@@ -121,7 +131,7 @@ func (s *Service) executePipelineClaim(ctx context.Context, claim *MLExecutionCl
 		return pipelineProblem("REFERENCE_INVALID", true)
 	}
 	name := "loom-" + c.InstanceID
-	input := kfp.CreateRun{Name: name, Namespace: c.Namespace, ServiceAccount: s.PipelineConfig.ServiceAccount,
+	input := kfp.CreateRun{ID: c.InstanceID, Name: name, Namespace: c.Namespace, ServiceAccount: s.PipelineConfig.ServiceAccount,
 		PipelineSpec: spec.PipelineSpec, RuntimeConfig: kfp.RuntimeConfig{Parameters: parameters,
 			PipelineRoot: strings.TrimRight(s.PipelineConfig.PipelineRoot, "/") + "/" + c.Namespace + "/" + c.InstanceID}}
 	data, _ := json.Marshal([]any{s.PipelineConfig.Endpoint, input})
@@ -130,12 +140,12 @@ func (s *Service) executePipelineClaim(ctx context.Context, claim *MLExecutionCl
 	journal := &pipelineSubmission{}
 	err = s.DB.WithContext(ctx).Where("instance_id = ?", c.InstanceID).First(journal).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		if c.Action == MLPipelineStop {
-			if claim.ExternalID != nil {
-				return pipelineProblem("IDENTITY_CONFLICT", true)
-			}
-			// 与提交使用同一个目标锁；从未持久化提交意图时可以确认没有发起提交。
-			return s.reportPipelineRun(ctx, claim, nil, "STOPPED", true)
+		if claim.ExternalID != nil {
+			return pipelineProblem("IDENTITY_CONFLICT", true)
+		}
+		if c.Action != MLPipelineSubmit {
+			// 提交和清理使用同一个目标锁。没有提交日志就证明 Loom 从未发起 KFP CreateRun。
+			return s.reportPipelineRun(ctx, claim, nil, pipelineAbsentState(c.Action), true, "")
 		}
 		journal = &pipelineSubmission{InstanceID: c.InstanceID, RequestHash: hash, RunName: name}
 		if err := s.DB.WithContext(ctx).Create(journal).Error; err != nil {
@@ -154,85 +164,170 @@ func (s *Service) executePipelineClaim(ctx context.Context, claim *MLExecutionCl
 		}
 		id = claim.ExternalID
 	}
+	if id != nil && *id != c.InstanceID {
+		return pipelineProblem("IDENTITY_CONFLICT", true)
+	}
+	if id != nil && !journal.Attempted {
+		return pipelineProblem("IDENTITY_CONFLICT", true)
+	}
+	if c.Action != MLPipelineSubmit && !journal.Attempted {
+		return s.reportPipelineRun(ctx, claim, nil, pipelineAbsentState(c.Action), true, "")
+	}
+
 	var run *kfp.Run
 	if id != nil {
 		run, err = s.PipelineClient.GetRun(ctx, *id)
 		if err != nil {
+			if kfpHTTPStatus(err, 404) {
+				switch c.Action {
+				case MLPipelineDelete, MLPipelineStop, MLPipelineEdit:
+					return s.reportPipelineRun(ctx, claim, nil, pipelineAbsentState(c.Action), true, *id)
+				default:
+					// 已绑定过的 Run 消失后不能重新创建，否则会把历史执行当作一次新执行。
+					return pipelineProblem("RESOURCE_NOT_FOUND", true)
+				}
+			}
 			return err
-		} // 404 不能冒充成功或再次创建
-	} else if journal.Attempted {
-		run, err = s.PipelineClient.FindRun(ctx, c.Namespace, name)
-		if err != nil {
-			return err
+		}
+	} else {
+		if journal.Attempted {
+			run, err = s.PipelineClient.GetRun(ctx, c.InstanceID)
+			if err != nil {
+				if !kfpHTTPStatus(err, 404) {
+					return err
+				}
+				run, err = nil, nil
+			}
+		} else {
+			// attempted 在 POST 前持久化；清理动作看到 false 时可以确认从未创建。
+			if err := guard(); err != nil {
+				return err
+			}
+			if err := repository.InTx(ctx, s.DB, func(st *repository.Store) error {
+				r := st.DB.WithContext(ctx).Model(journal).Where("instance_id = ? AND attempted = ?", c.InstanceID, false).Update("attempted", true)
+				if r.Error != nil {
+					return r.Error
+				}
+				if r.RowsAffected != 1 {
+					return pipelineProblem("SUBMISSION_UNCERTAIN", false)
+				}
+				// 在 POST 之前就纳入观测，覆盖响应丢失后原操作撤权/失败的窗口。
+				return st.DB.WithContext(ctx).Model(&model.PipelineRun{}).
+					Where("id = ? AND instance_id = ? AND deleted_at IS NULL", c.ResourceID, c.InstanceID).
+					Update("sync_enabled", true).Error
+			}); err != nil {
+				return err
+			}
+			journal.Attempted = true
 		}
 		if run == nil {
-			return pipelineProblem("SUBMISSION_UNCERTAIN", false)
-		}
-	} else if c.Action == MLPipelineStop {
-		if claim.ExternalID != nil {
-			return pipelineProblem("IDENTITY_CONFLICT", true)
-		}
-		return s.reportPipelineRun(ctx, claim, nil, "STOPPED", true)
-	} else {
-		// 先落盘再 POST。即使进程在 POST 前后崩溃，也绝不盲目二次创建。
-		if err := guard(); err != nil {
-			return err
-		}
-		r := s.DB.WithContext(ctx).Model(journal).Where("instance_id = ? AND attempted = ?", c.InstanceID, false).Update("attempted", true)
-		if r.Error != nil {
-			return r.Error
-		}
-		if r.RowsAffected != 1 {
-			return pipelineProblem("SUBMISSION_UNCERTAIN", false)
-		}
-		if err := guard(); err != nil {
-			return err
-		}
-		run, err = s.PipelineClient.CreateRun(ctx, input)
-		if err != nil {
-			var response *kfp.Error
-			if errors.As(err, &response) && (response.Status == 400 || response.Status == 401 || response.Status == 403) {
-				return pipelineProblem("EXTERNAL_REJECTED", true)
+			// 本仓库配套 KFP 保留客户端提供的 run_id，并对相同 ID 的 CreateRun 幂等返回。
+			// 因此响应丢失后可安全重放同一请求，不会产生第二个 Workflow。
+			if err := guard(); err != nil {
+				return err
 			}
-			return pipelineProblem("SUBMISSION_UNCERTAIN", false)
+			run, err = s.PipelineClient.CreateRun(ctx, input)
+			if err != nil {
+				if kfpHTTPStatus(err, 409) {
+					run, err = s.PipelineClient.GetRun(ctx, c.InstanceID)
+				}
+				if err != nil {
+					if kfpHTTPStatus(err, 400) || kfpHTTPStatus(err, 401) || kfpHTTPStatus(err, 403) {
+						return pipelineProblem("EXTERNAL_REJECTED", true)
+					}
+					return pipelineProblem("SUBMISSION_UNCERTAIN", false)
+				}
+			}
 		}
 	}
-	if !validator.IsCatalogID(run.ID) || run.Name != name || run.Namespace != c.Namespace || run.Description != input.Description {
+	if !validator.IsCatalogID(run.ID) || run.ID != c.InstanceID || run.Name != name || run.Namespace != c.Namespace || run.Description != input.Description {
 		return pipelineProblem("IDENTITY_CONFLICT", true)
 	}
 	if id != nil && run.ID != *id {
 		return pipelineProblem("IDENTITY_CONFLICT", true)
 	}
 	// 独立保存已发生的外部副作用，即使提交任务刚被停止意图替代也保留，供停止任务收敛。
-	bound := s.DB.WithContext(ctx).Model(journal).Where("instance_id = ? AND request_hash = ? AND (external_id IS NULL OR external_id = ?)", c.InstanceID, hash, run.ID).Update("external_id", run.ID)
-	if bound.Error != nil {
-		return bound.Error
-	}
-	if bound.RowsAffected == 0 {
-		// MySQL 相同值 UPDATE 可能为 0；读回区分幂等命中和条件不匹配。
-		fresh := &pipelineSubmission{}
-		if err := s.DB.WithContext(ctx).Where("instance_id = ?", c.InstanceID).First(fresh).Error; err != nil {
-			return err
-		}
-		if fresh.RequestHash != hash || fresh.ExternalID == nil || *fresh.ExternalID != run.ID {
-			return pipelineProblem("IDENTITY_CONFLICT", true)
-		}
+	if err := s.bindPipelineSubmission(ctx, c, journal, hash, run.ID); err != nil {
+		return err
 	}
 	state := pipelineRunState(run.State)
 	if claim.ObservedState != nil && *claim.ObservedState == "RUNNING" && (state == "UNKNOWN" || state == "PENDING") {
 		// KFP 暂时回退/未知不能覆盖已确认的运行状态，也不能伪造一个新的运行证据。
 		return pipelineProblem("EXTERNAL_UNAVAILABLE", false)
 	}
-	if c.Action == MLPipelineStop && run.State != "CANCELING" && state != "SUCCEEDED" && state != "FAILED" && state != "STOPPED" {
+	terminal := state == "SUCCEEDED" || state == "FAILED" || state == "STOPPED"
+	if (c.Action == MLPipelineStop || c.Action == MLPipelineDelete || c.Action == MLPipelineEdit) && !terminal && run.State != "CANCELING" {
 		if err := guard(); err != nil {
 			return err
 		}
 		if err := s.PipelineClient.TerminateRun(ctx, run.ID); err != nil {
+			if kfpHTTPStatus(err, 404) {
+				return s.reportPipelineRun(ctx, claim, nil, pipelineAbsentState(c.Action), true, run.ID)
+			}
 			return err
 		}
 		// terminate 成功只是请求受理，下一轮 GET 真实 CANCELED 后才完成。
 	}
-	return s.reportPipelineRun(ctx, claim, run, state, false)
+	if (c.Action == MLPipelineDelete || c.Action == MLPipelineEdit) && terminal {
+		if err := guard(); err != nil {
+			return err
+		}
+		if err := s.PipelineClient.DeleteRun(ctx, run.ID); err != nil {
+			if kfpHTTPStatus(err, 404) {
+				return s.reportPipelineRun(ctx, claim, nil, pipelineAbsentState(c.Action), true, run.ID)
+			}
+			return err
+		}
+		run, err = s.PipelineClient.GetRun(ctx, run.ID)
+		if err != nil {
+			if kfpHTTPStatus(err, 404) {
+				return s.reportPipelineRun(ctx, claim, nil, pipelineAbsentState(c.Action), true, c.InstanceID)
+			}
+			return err
+		}
+		if !validator.IsCatalogID(run.ID) || run.ID != c.InstanceID || run.Name != name || run.Namespace != c.Namespace || run.Description != input.Description {
+			return pipelineProblem("IDENTITY_CONFLICT", true)
+		}
+		state = pipelineRunState(run.State)
+	}
+	return s.reportPipelineRun(ctx, claim, run, state, false, run.ID)
+}
+
+// 外部身份与观测入队原子持久化，即使原操作随后撤权/失败，也不会漏掉后台状态同步。
+func (s *Service) bindPipelineSubmission(ctx context.Context, c *MLCommand, journal *pipelineSubmission, hash, id string) error {
+	return repository.InTx(ctx, s.DB, func(st *repository.Store) error {
+		bound := st.DB.WithContext(ctx).Model(journal).
+			Where("instance_id = ? AND request_hash = ? AND (external_id IS NULL OR external_id = ?)", c.InstanceID, hash, id).
+			Update("external_id", id)
+		if bound.Error != nil {
+			return bound.Error
+		}
+		if bound.RowsAffected == 0 {
+			// MySQL 相同值 UPDATE 可能为 0；读回区分幂等命中和条件不匹配。
+			fresh := &pipelineSubmission{}
+			if err := st.DB.WithContext(ctx).Where("instance_id = ?", c.InstanceID).First(fresh).Error; err != nil {
+				return err
+			}
+			if fresh.RequestHash != hash || fresh.ExternalID == nil || *fresh.ExternalID != id {
+				return pipelineProblem("IDENTITY_CONFLICT", true)
+			}
+		}
+		return st.DB.WithContext(ctx).Model(&model.PipelineRun{}).
+			Where("id = ? AND instance_id = ? AND deleted_at IS NULL", c.ResourceID, c.InstanceID).
+			Update("sync_enabled", true).Error
+	})
+}
+
+func kfpHTTPStatus(err error, status int) bool {
+	var response *kfp.Error
+	return errors.As(err, &response) && response.Status == status
+}
+
+func pipelineAbsentState(action MLAction) string {
+	if action == MLPipelineDelete {
+		return "DELETED"
+	}
+	return "STOPPED"
 }
 
 func pipelineRunState(state string) string {
@@ -252,8 +347,8 @@ func pipelineRunState(state string) string {
 	}
 }
 
-func (s *Service) reportPipelineRun(ctx context.Context, claim *MLExecutionClaim, run *kfp.Run, state string, absent bool) error {
-	id := ""
+func (s *Service) reportPipelineRun(ctx context.Context, claim *MLExecutionClaim, run *kfp.Run, state string, absent bool, externalID string) error {
+	id := externalID
 	if run != nil {
 		id = run.ID
 	}
@@ -324,6 +419,9 @@ func (s *Service) PipelineRunRuntime(ctx context.Context, actor, groupID, id uin
 	}
 	if s.PipelineClient == nil {
 		return nil, apperr.New(apperr.CodeUnavailable, "官方 KFP 后端尚未配置")
+	}
+	if n.ExecutionCleaned {
+		return nil, apperr.New(apperr.CodeConflict, "旧执行已清理，当前配置待手动启动；旧记录请查询 attempts/history")
 	}
 	if n.ExternalID == nil {
 		return nil, apperr.New(apperr.CodeConflict, "运行尚未取得 KFP Run ID，请先查询操作进度")

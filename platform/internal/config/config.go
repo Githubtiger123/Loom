@@ -190,8 +190,9 @@ func Default() *Config {
 		Identity: Identity{UserIDHeader: "kubeflow-userid", UserIDPrefix: "", SubjectHeader: "oidc-sub", TrustedProxyCIDRs: []string{"127.0.0.1/32", "::1/128"}},
 		Auth:     Auth{Audience: "loom-api", AccessTTL: Duration(15 * time.Minute), SessionTTL: Duration(15 * 24 * time.Hour)},
 		Images:   Images{Path: "configs/images.yaml"},
-		Pipeline: Pipeline{ServiceAccount: "default-editor", Timeout: Duration(15 * time.Second), PollInterval: Duration(15 * time.Second)},
-		Log:      Log{Level: "info"},
+		Pipeline: Pipeline{ServiceAccount: "default-editor", Timeout: Duration(15 * time.Second), PollInterval: Duration(15 * time.Second),
+			SyncInterval: Duration(5 * time.Second), TerminalSyncInterval: Duration(5 * time.Minute), SyncConcurrency: 2, SyncQPS: 10},
+		Log: Log{Level: "info"},
 	}
 }
 
@@ -296,6 +297,10 @@ func applyEnv(c *Config) {
 	envStr(&c.Pipeline.PipelineRoot, "LOOM_PIPELINE_ROOT")
 	envDuration(&c.Pipeline.Timeout, "LOOM_PIPELINE_TIMEOUT")
 	envDuration(&c.Pipeline.PollInterval, "LOOM_PIPELINE_POLL_INTERVAL")
+	envDuration(&c.Pipeline.SyncInterval, "LOOM_PIPELINE_SYNC_INTERVAL")
+	envDuration(&c.Pipeline.TerminalSyncInterval, "LOOM_PIPELINE_TERMINAL_SYNC_INTERVAL")
+	envInt(&c.Pipeline.SyncConcurrency, "LOOM_PIPELINE_SYNC_CONCURRENCY")
+	envInt(&c.Pipeline.SyncQPS, "LOOM_PIPELINE_SYNC_QPS")
 	envBool(&c.Auth.Enabled, "LOOM_AUTH_ENABLED")
 	envStr(&c.Auth.Issuer, "LOOM_AUTH_ISSUER")
 	envStr(&c.Auth.Audience, "LOOM_AUTH_AUDIENCE")

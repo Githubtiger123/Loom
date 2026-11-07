@@ -102,6 +102,12 @@ pipeline:
   pipeline_root: "s3://REPLACE-ME/loom/pipelines"
   timeout: 15s
   poll_interval: 15s
+  # 独立状态同步：不依赖原操作单/原用户权限；只观察 Loom 已管理的 Run。
+  sync_interval: 5s
+  terminal_sync_interval: 5m
+  sync_concurrency: 2
+  # 每个 pipeline-worker 进程的观测请求上限，不包括提交/停止/删除动作自身的 API 调用。
+  sync_qps: 10
 
 # 可选机器执行入口，与公网业务监听隔离；只接受 CA 验证并匹配固定证书指纹的客户端。
 # Trainer/KServe 仍需外部适配器；内置 KFP 启用后不接受外部领取 Pipeline 任务。

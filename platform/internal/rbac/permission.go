@@ -14,6 +14,7 @@ func Permissions() []model.Permission {
 	result := []model.Permission{}
 	for _, entry := range []struct{ scope, codes string }{
 		{"global", "user.read user.manage role.manage group.create group.quota.update audit.read"},
+		{"group", "pipeline.update pipeline.version.update"},
 		{"group", "group.read group.update group.delete group.disable group.restore group.member.manage group.owner.transfer group.quota.read notebook.create notebook.read notebook.read.any notebook.update notebook.delete notebook.stop notebook.start notebook.connect notebook.transfer notebook.transfer.any workspace.read workspace.attach workspace.delete workspace.transfer workspace.manage.any pipeline.create pipeline.read pipeline.read.any pipeline.version.create pipeline.run pipeline.stop pipeline.delete trainer.create trainer.read trainer.read.any trainer.stop trainer.delete kserve.create kserve.read kserve.read.any kserve.update kserve.deploy kserve.stop kserve.delete"},
 	} {
 		for _, code := range strings.Fields(entry.codes) {

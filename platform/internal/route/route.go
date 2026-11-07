@@ -75,7 +75,7 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "POST /api/v1/groups/{gid}/workspaces/{wid}/detach", api.DetachWorkspace)
 	register(mux, api, "POST /api/v1/groups/{gid}/workspaces/{wid}/owner-transfer", api.TransferWorkspaceOwner)
 
-	// Pipeline 定义、不可变版本及运行分离。
+	// Pipeline 定义、可编辑版本及带独立执行快照的业务运行。
 	register(mux, api, "GET /api/v1/groups/{gid}/pipelines", api.Pipelines)
 	register(mux, api, "POST /api/v1/groups/{gid}/pipelines", api.CreatePipeline)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}", api.Pipeline)
@@ -83,10 +83,15 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}/versions", api.PipelineVersions)
 	register(mux, api, "POST /api/v1/groups/{gid}/pipelines/{pid}/versions", api.CreatePipelineVersion)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}/versions/{vid}", api.PipelineVersion)
+	register(mux, api, "PUT /api/v1/groups/{gid}/pipelines/{pid}/versions/{vid}", api.UpdatePipelineVersion)
+	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}/versions/{vid}/revisions", api.PipelineVersionRevisions)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs", api.PipelineRuns)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}/runs", api.PipelineRuns)
 	register(mux, api, "POST /api/v1/groups/{gid}/pipelines/{pid}/runs", api.SubmitPipelineRun)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}", api.PipelineRun)
+	register(mux, api, "PUT /api/v1/groups/{gid}/pipeline-runs/{rid}", api.UpdatePipelineRun)
+	register(mux, api, "POST /api/v1/groups/{gid}/pipeline-runs/{rid}/start", api.StartPipelineRun)
+	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/attempts", api.PipelineRunAttempts)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/runtime", api.PipelineRunRuntime)
 	register(mux, api, "DELETE /api/v1/groups/{gid}/pipeline-runs/{rid}", api.DeletePipelineRun)
 	register(mux, api, "POST /api/v1/groups/{gid}/pipeline-runs/{rid}/stop", api.StopPipelineRun)

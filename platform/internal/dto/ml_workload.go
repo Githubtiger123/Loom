@@ -48,16 +48,35 @@ type CreatePipelineVersionReq struct {
 }
 
 type SubmitPipelineRunReq struct {
-	Name       string             `json:"name"`
-	VersionID  uint64             `json:"versionId"`
-	Parameters []MLParameterValue `json:"parameters"`
+	Name            string             `json:"name"`
+	VersionID       uint64             `json:"versionId"`
+	VersionRevision uint64             `json:"versionRevision,omitempty"`
+	Parameters      []MLParameterValue `json:"parameters"`
 }
 
 type PipelineRunSpec struct {
-	PipelineID uint64 `json:"pipelineId"`
-	VersionID  uint64 `json:"versionId"`
+	PipelineID      uint64 `json:"pipelineId"`
+	VersionID       uint64 `json:"versionId"`
+	VersionRevision uint64 `json:"versionRevision,omitempty"`
 	PipelineVersionSpec
 	Values []MLParameterValue `json:"values"`
+}
+
+type UpdatePipelineVersionReq struct {
+	Revision       uint64 `json:"revision"` // 版本自身的 revision
+	ParentRevision uint64 `json:"parentRevision"`
+	PackageYAML    string `json:"packageYaml,omitempty"`
+	PipelineVersionSpec
+}
+
+// 指定版本复制配置，或提交编译 IR 仅修改此业务运行；均不自动启动。
+type UpdatePipelineRunReq struct {
+	Revision        uint64             `json:"revision"`
+	VersionID       uint64             `json:"versionId"`
+	VersionRevision uint64             `json:"versionRevision"`
+	Parameters      []MLParameterValue `json:"parameters"`
+	PackageYAML     string             `json:"packageYaml,omitempty"`
+	PipelineSpec    json.RawMessage    `json:"pipelineSpec,omitempty"`
 }
 
 type MLResources struct {
@@ -196,7 +215,7 @@ func validateMLValues(values []MLParameterValue) error {
 
 func (r SubmitPipelineRunReq) Validate() error {
 	if r.VersionID == 0 || !validator.IsDNS1123Label(r.Name) {
-		return mlInvalid("必须提供不可变版本 ID 和有效运行名称")
+		return mlInvalid("必须提供版本 ID 和有效运行名称")
 	}
 	return validateMLValues(r.Parameters)
 }
@@ -224,7 +243,7 @@ func BindPipelineParameters(schema []MLParameterSchema, values []MLParameterValu
 		}
 		if (p.Type == "CREDENTIAL" && v.CredentialRef == nil) ||
 			(p.Type != "CREDENTIAL" && (v.Value == nil || !validator.IsMLPublicValue(p.Type, *v.Value))) {
-			return nil, mlInvalid("Pipeline 参数与不可变版本 schema 不匹配")
+			return nil, mlInvalid("Pipeline 参数与所选版本 schema 不匹配")
 		}
 		bound = append(bound, v)
 		delete(supplied, p.Name)

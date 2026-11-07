@@ -7,7 +7,7 @@
 - 以下路径均以 `/api/v1/groups/{gid}` 开头，使用平台认证及当前空间权限。
 - 写请求需 `Idempotency-Key`。同操作者同键同请求返回原操作，同键不同请求冲突；重放也重新检查对象权限。
 - 修改、停止、删除和归档需当前 `revision`，不接受覆盖更新。创建接口的名称是 DNS-1123 label。
-- 查询返回 `{"data": ...}`；列表 data 为 `{"items": [], "nextAfter": ...}`。分页使用 `after`、`limit`，默认只查询本人资源；`scope=all/unowned` 额外要求对应模块的 `read.any`。
+- 查询返回 `{"data": ...}`；资源列表 data 为 `{"items": [], "nextAfter": ...}`，历史、版本修订和执行快照接口返回 data 数组（以各接口约定为准）。分页使用 `after`、`limit`，默认只查询本人资源；`scope=all/unowned` 额外要求对应模块的 `read.any`。
 - 默认不列出已删除或归档对象，可用 `includeDeleted=true`。详情、版本、历史及操作单仍执行当前授权，不因曾经创建过对象而绕过撤权。
 - `202/PENDING` 只代表持久受理，必须看操作单及对象 `desiredState/observedState/revision/appliedRevision`。同步完成的元数据操作返回 `200`，不表示外部工作负载已运行。
 - 三模块分别使用 `pipeline.*`、`trainer.*`、`kserve.*` 权限；跨负责人访问还需相应 `read.any`。执行前仍会重查启动请求人的状态和权限。
@@ -20,16 +20,21 @@
 | --- | --- | --- |
 | GET / POST | `/pipelines` | 查询 / 创建定义 |
 | GET / DELETE | `/pipelines/{pid}` | 详情 / 归档定义 |
-| GET / POST | `/pipelines/{pid}/versions` | 查询 / 创建不可变版本 |
+| GET / POST | `/pipelines/{pid}/versions` | 查询 / 创建版本 |
+| PUT | `/pipelines/{pid}/versions/{vid}` | 原地修改版本，保留修订历史 |
+| GET | `/pipelines/{pid}/versions/{vid}/revisions` | 版本修订历史 |
 | GET | `/pipelines/{pid}/versions/{vid}` | 版本详情 |
 | GET / POST | `/pipelines/{pid}/runs` | 查询该定义的运行 / 从指定版本提交新运行 |
 | GET | `/pipeline-runs` | 查询空间内运行 |
-| GET / DELETE | `/pipeline-runs/{rid}` | 详情 / 归档终态运行 |
+| GET / DELETE | `/pipeline-runs/{rid}` | 详情 / 异步停止并删除运行 |
+| PUT | `/pipeline-runs/{rid}` | 清理旧执行后编辑保存，不自动启动 |
+| POST | `/pipeline-runs/{rid}/start` | 手动创建新的执行实例 |
+| GET | `/pipeline-runs/{rid}/attempts` | 已清理的旧执行快照 |
 | GET | `/pipeline-runs/{rid}/runtime` | 官方实时运行及经筛选的节点状态 |
 | POST | `/pipeline-runs/{rid}/stop` | 请求停止 |
 | GET | `/pipeline-runs/{rid}/history` | 操作历史 |
 
-定义、不可变版本和运行分表保存；运行复制版本及参数快照，后续新版本不修改历史运行。
+定义、版本和运行分表保存；版本可原地修改并递增自身 revision，运行复制版本及参数快照，不随共享版本修改。运行编辑先清理旧 KFP 实例，再保存为 STOPPED 待启动；手动 start 换新 instanceId/KFP Run ID。完整请求、权限及并发语义见 [编辑与重建](pipeline-edit.md)。
 
 创建定义示例：
 
@@ -53,17 +58,19 @@
 {"name":"daily-train-001","versionId":1,"parameters":[{"name":"epochs","value":"10"}]}
 ```
 
-也可提交 `pipelineSpec` JSON 对象，与 packageYaml 二选一。后端从 IR 提取参数 schema、默认值及摘要，不再要求用户手填；支持 STRING / INTEGER / DOUBLE / BOOLEAN / LIST / STRUCT。公开值仍以字符串传输，提交 KFP 时按类型转换为原生 JSON 值。旧协议另有 NUMBER / CREDENTIAL，但内置主线没有凭据引用解析器，不能传明文凭据或仅传 packageRef。运行不能用操作重试重新启动已经结束的作业，须提交新运行。
+也可提交 `pipelineSpec` JSON 对象，与 packageYaml 二选一。后端从 IR 提取参数 schema、默认值及摘要，不再要求用户手填；支持 STRING / INTEGER / DOUBLE / BOOLEAN / LIST / STRUCT。公开值仍以字符串传输，提交 KFP 时按类型转换为原生 JSON 值。旧协议另有 NUMBER / CREDENTIAL，但内置主线没有凭据引用解析器，不能传明文凭据或仅传 packageRef。操作重试不复用终态执行，编辑清理后的手动 start 会创建新的 KFP Run。
 
-启用 pipeline 配置并独立运行 pipeline-worker 后，提交调用官方 CreateRun，停止调用 TerminateRun，GET 轮询同步状态。使用 namespace 的默认 Experiment 和内嵌 pipeline_spec，不向官方 Pipeline/version 目录重复上传。CreateRun 超时采用持久提交日志和身份核对恢复，不盲目二次提交。详细限制、配置与故障恢复见 [KFP 主线](pipeline-kfp.md)。
+启用 pipeline 配置并独立运行 pipeline-worker 后，提交调用官方 CreateRun，停止调用 TerminateRun，删除在终态后调用 DeleteRun，GET 轮询同步状态。KFP Run ID 固定为 Loom `instanceId`，响应丢失时按同 ID 恢复或幂等重放。使用 namespace 的默认 Experiment 和内嵌 pipeline_spec，不向官方 Pipeline/version 目录重复上传。详细兼容条件、配置与故障恢复见 [KFP 主线](pipeline-kfp.md)。
 
-停止和归档请求示例：
+运行列表/详情还返回 `kfpState`、`kfpSyncedAt`、`kfpSyncAttemptedAt`、`kfpSyncReason`，分别表示最近核验的原始状态、成功读取时间、最近尝试时间及同步异常。独立观测在操作结束或原用户撤权后继续进行；超时/404 不会伪造失败或删除。默认活动运行约 5 秒、终态约 5 分钟观测，受并发/限速和 KFP 自身延迟影响。上述字段需显式执行 `000016_pipeline_sync.sql`。
+
+停止和删除请求示例：
 
 ```json
 {"revision":1}
 ```
 
-`pipeline.stop` 负责停止，两个 DELETE 使用 `pipeline.delete`。运行归档只接受执行器确认的 SUCCEEDED / FAILED / STOPPED、已应用 revision 且没有未完成操作的对象。归档仅记录 `deletedAt` 并保留原运行证据，不伪造外部 DELETED 或删除外部 KFP 记录。先归档定义下所有运行，才能归档定义；版本和历史保留。已确认归档的终态运行不会因 STOPPED 观测过期再次算成活动任务。
+`pipeline.stop` 负责停止，两个 DELETE 使用 `pipeline.delete`。删除 Pipeline 定义仍是本地归档；删除 Pipeline Run 则是持久异步操作：可替代尚未完成的提交，必要时恢复确定性 KFP Run，先终止活动运行，再删除 KFP Run，并在确认 GET 404 后写入 Loom `DELETED/deletedAt`。所以创建后立即删除可安全收敛。Loom 的版本快照、操作和历史保留；先删除定义下所有运行，才能归档定义。
 
 ## Trainer
 

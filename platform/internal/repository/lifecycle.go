@@ -88,8 +88,10 @@ func (s *Store) LiveMLDependencies(ctx context.Context, groupID, userID uint64) 
 			quiet += ` OR (n.observed_state IN ('SUCCEEDED','FAILED') AND n.status=n.observed_state AND n.desired_state<>'DELETED')`
 		}
 		if spec.target == "pipeline_run" {
-			// 归档只接受已应用的不可重启作业终态。保留其原观测证据，不能因
-			// STOPPED 时间超过两分钟又把历史归档记录当作活动任务。
+			// KFP 外部取消也可能在 Loom 的 RUNNING 意图下成为真实 STOPPED。
+			quiet += ` OR (n.observed_state='STOPPED' AND n.status='STOPPED' AND n.desired_state<>'DELETED')`
+			// 兼容升级前已经本地归档的 Pipeline 终态记录；新版本删除会走上面的
+			// DELETED 分支。旧 STOPPED 记录不能因观测超过两分钟又被算作活动任务。
 			quiet += ` OR (n.deleted_at IS NOT NULL AND n.observed_state IN ('SUCCEEDED','FAILED','STOPPED')
  AND n.status=n.observed_state AND n.desired_state<>'DELETED')`
 		}

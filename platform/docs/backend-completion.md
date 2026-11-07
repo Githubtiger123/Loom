@@ -11,7 +11,7 @@
 | 额度 | 实际 ResourceQuota 身份读取、创建/启动预算占用、执行确认后计入、停止确认后释放、配额调整 | SQL 预算不能代替 Kubernetes 强制准入；CPU/内存/GPU 预算不等于磁盘实际使用量 |
 | 工作目录 | 独立资产、保留保护、同空间复用、关联/解除、负责人交接、安全删除 | 不能任意认领 PVC；原生 UID/实例标记不变；不提供文件浏览或磁盘文件占用采集 |
 | 空间 / 用户 | 停用、恢复、安全删除；成员移除和用户禁用生成 Notebook 停止任务、保留数据并等待撤权 | 固定 Profile Owner 始终为配置中的 admin 身份；有 live ML 时先显式停止，当前不自动取消训练 |
-| Pipeline | 定义、不可变 IR 导入、参数解析、运行快照、内置 KFP 提交/停止/状态轮询、节点详情、终态归档 | 需官方 KFP 与独立 pipeline-worker；只接入单文档 v2 IR 主线，归档不删除外部记录 |
+| Pipeline | 定义、IR 导入/版本原地编辑、修订历史、参数解析、运行快照、内置 KFP 提交/停止/删除/状态轮询、运行编辑清理后手动重建、节点详情、本地查询投影 | 需兼容客户端确定性 Run ID 的官方 KFP 与独立 pipeline-worker；只接入单文档 v2 IR 主线 |
 | Trainer | 训练规格、创建/停止/删除、分页、历史、操作单 | 外部 Trainer 适配器负责受管 runtime/code/data/output 解析和提交 |
 | KServe | 服务、不可变修订、修改/部署/停止/删除、历史 | 外部适配器负责 model/runtime 解析、真实部署与观测 |
 | 机器执行桥 | 独立 mTLS listener、领取/续租/回填/回执、证书绑定、外部 ID、单调序号、过时目标隔离 | 不是实际适配器，不保证跨系统 exactly-once；必须按执行桥契约持久幂等并收敛迟到副作用 |
@@ -26,7 +26,7 @@ Notebook 的运行观测核对 CR、StatefulSet、Pod 的 UID 归属链。停止
 
 空间停用先冻结业务并持久化 Notebook 停止任务，再等待真实停止与成员访问撤销；恢复重新检查基础设施并落实当前有效成员权限，不自动启动旧 Notebook。用户禁用和移除成员也不会把数据自动移交给管理员。
 
-Pipeline 和 Trainer 的提交回执只代表已提交，不代表运行成功。外部 ID 固定、租约、实例/revision 和观察序号共同约束回填。需要删除实际资源的操作须确认目标真实不存在，不接受“已发出删除请求”作为完成证据；Pipeline DELETE 仅为终态本地归档，不删除外部 KFP 资源。
+Pipeline 和 Trainer 的提交回执只代表已提交，不代表运行成功。外部 ID 固定、租约、实例/revision 和观察序号共同约束回填。需要删除实际资源的操作须确认目标真实不存在，不接受“已发出删除请求”作为完成证据；Pipeline Run DELETE 会终止、删除 KFP Run 并确认 404，Pipeline 定义 DELETE 仍只归档业务定义。
 
 ## 入口与代码位置
 
@@ -50,7 +50,9 @@ Pipeline 和 Trainer 的提交回执只代表已提交，不代表运行成功�
 | 000012_backend_permissions.sql | 显式升级权限字典与内置角色，不改自定义角色 |
 | 000013_ml_observation.sql | 执行空间身份与部署完成后的 KServe 健康观测回执 |
 | 000014_notebook_server_type.sql | Notebook 类型持久化及旧 Jupyter 规格兼容回填 |
-| 000015_pipeline_kfp.sql | 内置 KFP 提交意图、请求摘要及外部 Run ID 恢复日志 |
+| 000015_pipeline_kfp.sql | Pipeline DELETED 状态约束，以及内置 KFP 提交意图、请求摘要和确定性 Run ID 恢复日志 |
+| 000016_pipeline_sync.sql | 独立状态观测调度、租约、索引和同步新鲜度；不依赖操作单或原用户权限 |
+| 000017_pipeline_edit.sql | 版本原地编辑及修订历史、运行 pendingSpec/清理标记、旧执行快照和编辑权限 |
 
 000008 未使用，迁移器不要求编号连续。升级前停止旧认证写入者，禁止旧版认证与新版会话逻辑混跑。显式迁移后再部署新版进程，启动只检查版本和 checksum，不自动建表。既有本地用户下一次登录需改密，成功改密撤销旧会话并重新登录。
 

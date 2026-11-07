@@ -107,6 +107,58 @@ func (a *API) CreatePipelineVersion(ctx context.Context, u *model.User, r *http.
 	return mlWrite(ctx, u, r, "pid", a.service.CreatePipelineVersion)
 }
 
+func (a *API) UpdatePipelineVersion(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	gid, pid, err := mlIDs(r, "pid")
+	if err != nil {
+		return nil, err
+	}
+	vid, err := pathID(r, "vid")
+	if err != nil {
+		return nil, err
+	}
+	in, err := decode[dto.UpdatePipelineVersionReq](r)
+	if err != nil {
+		return nil, err
+	}
+	return a.service.UpdatePipelineVersion(ctx, u.ID, gid, pid, vid, requestKey(r), in)
+}
+
+func (a *API) PipelineVersionRevisions(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	gid, pid, err := mlIDs(r, "pid")
+	if err != nil {
+		return nil, err
+	}
+	vid, err := pathID(r, "vid")
+	if err != nil {
+		return nil, err
+	}
+	q, err := mlQuery(r)
+	if err != nil {
+		return nil, err
+	}
+	return a.service.PipelineVersionRevisions(ctx, u.ID, gid, pid, vid, q)
+}
+
+func (a *API) UpdatePipelineRun(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	return mlWrite(ctx, u, r, "rid", a.service.UpdatePipelineRun)
+}
+
+func (a *API) StartPipelineRun(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	return mlWrite(ctx, u, r, "rid", a.service.StartPipelineRun)
+}
+
+func (a *API) PipelineRunAttempts(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	gid, id, err := mlIDs(r, "rid")
+	if err != nil {
+		return nil, err
+	}
+	q, err := mlQuery(r)
+	if err != nil {
+		return nil, err
+	}
+	return a.service.PipelineRunAttempts(ctx, u.ID, gid, id, q)
+}
+
 func (a *API) PipelineRuns(ctx context.Context, u *model.User, r *http.Request) (any, error) {
 	groupID, _, err := mlIDs(r, "")
 	if err != nil {
