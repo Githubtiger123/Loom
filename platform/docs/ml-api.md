@@ -31,10 +31,13 @@
 | POST | `/pipeline-runs/{rid}/start` | 手动创建新的执行实例 |
 | GET | `/pipeline-runs/{rid}/attempts` | 已清理的旧执行快照 |
 | GET | `/pipeline-runs/{rid}/runtime` | 官方实时运行及经筛选的节点状态 |
+| GET | `/pipeline-runs/{rid}/tasks/{taskId}/logs` | 节点在线容器日志快照 / follow 流 |
 | POST | `/pipeline-runs/{rid}/stop` | 请求停止 |
 | GET | `/pipeline-runs/{rid}/history` | 操作历史 |
 
 定义、版本和运行分表保存；版本可原地修改并递增自身 revision，运行复制版本及参数快照，不随共享版本修改。运行编辑先清理旧 KFP 实例，再保存为 STOPPED 待启动；手动 start 换新 instanceId/KFP Run ID。完整请求、权限及并发语义见 [编辑与重建](pipeline-edit.md)。
+
+在线日志由 Loom 授权后直接读取 Kubernetes pods/log，不经过 KFP 日志代理或 worker；需要 pipeline.logs 权限。普通读取返回 JSON 快照，follow=true 返回 HTTP 纯文本流（不使用 JSON envelope）。参数、连接上限和归属校验见 [公共日志组件](pod-logs.md)。
 
 创建定义示例：
 

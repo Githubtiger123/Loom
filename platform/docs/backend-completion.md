@@ -53,6 +53,7 @@ Pipeline 和 Trainer 的提交回执只代表已提交，不代表运行成功�
 | 000015_pipeline_kfp.sql | Pipeline DELETED 状态约束，以及内置 KFP 提交意图、请求摘要和确定性 Run ID 恢复日志 |
 | 000016_pipeline_sync.sql | 独立状态观测调度、租约、索引和同步新鲜度；不依赖操作单或原用户权限 |
 | 000017_pipeline_edit.sql | 版本原地编辑及修订历史、运行 pendingSpec/清理标记、旧执行快照和编辑权限 |
+| 000018_pipeline_logs.sql | Pipeline 在线日志独立权限及内置角色显式升级；公共 Reader 同时复用至 Notebook 日志快照 |
 
 000008 未使用，迁移器不要求编号连续。升级前停止旧认证写入者，禁止旧版认证与新版会话逻辑混跑。显式迁移后再部署新版进程，启动只检查版本和 checksum，不自动建表。既有本地用户下一次登录需改密，成功改密撤销旧会话并重新登录。
 

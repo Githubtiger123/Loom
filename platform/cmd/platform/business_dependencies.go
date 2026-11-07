@@ -18,6 +18,7 @@ func newBusinessService(base *service.Service, client *k8s.Client) *service.Serv
 	base.PipelineVerifier = boundPipelineVerifier{client: client, owner: base.InfrastructureOwner}
 	if client != nil {
 		base.SetNotebookReader(client)
+		base.PipelineLogs = client
 	}
 	return base
 }

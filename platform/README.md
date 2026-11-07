@@ -89,6 +89,8 @@ go run ./cmd/platform -cmd=pipeline-worker -worker-concurrency=4
 
 Pipeline 支持版本原地编辑和运行“清理后编辑、手动重建”。显式应用新增 `000017_pipeline_edit.sql` 后，同步升级 API/worker；业务运行 ID 保留，重建换新 instanceId/KFP Run ID，旧执行快照保留。详见 [编辑接口](docs/pipeline-edit.md)。本轮未执行迁移或真实联调。
 
+Pipeline 在线日志通过公共 `internal/k8s/podlog` Reader 直读 Kubernetes，支持快照和 follow；Notebook 现有日志快照也复用该组件。需显式应用 `000018_pipeline_logs.sql`，并为 API 机器身份配置只读 pods/log 与执行归属核验权限，详见 [日志接口](docs/pod-logs.md)。离线归档和终端不在此次实现范围。
+
 Pipeline 独立观测另需显式执行 `000016_pipeline_sync.sql`（本轮未执行），随 pipeline-worker 常驻运行。默认活动 Run 约 5 秒、终态约 5 分钟查询一次；`sync_concurrency=2`、`sync_qps=10` 限制每进程观测开销。操作结束/撤权不停止观测，已逻辑删除的 Run 停止对账。运行查询提供同步时间与异常原因，详情见 [KFP 状态同步](docs/pipeline-kfp.md)。
 
 - `worker` 每约 2 秒扫描待执行任务；默认并发 4，支持 1–16；数据库最大连接数至少为并发数 + 2（建议沿用 50）。

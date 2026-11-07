@@ -9,6 +9,7 @@ package k8s
 import (
 	"fmt"
 
+	"github.com/githubtiger123/loom/platform/internal/k8s/podlog"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -67,6 +68,7 @@ type Client struct {
 	cfg  Config
 	kube kubernetes.Interface
 	dyn  dynamic.Interface
+	logs *podlog.Reader
 }
 
 // New 用给定 rest.Config 构造客户端（本地开发用 kubeconfig）。
@@ -79,7 +81,14 @@ func New(restCfg *rest.Config, cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build dynamic client: %w", err)
 	}
-	return &Client{cfg: cfg.withDefaults(), kube: kube, dyn: dyn}, nil
+	// 普通 API 保留短超时；follow 日志不能被普通客户端的 10 秒总超时截断。
+	logConfig := rest.CopyConfig(restCfg)
+	logConfig.Timeout = 0
+	logClient, err := kubernetes.NewForConfig(logConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build pod log client: %w", err)
+	}
+	return &Client{cfg: cfg.withDefaults(), kube: kube, dyn: dyn, logs: podlog.New(logClient)}, nil
 }
 
 // NewInCluster 使用 Pod 内的 ServiceAccount。

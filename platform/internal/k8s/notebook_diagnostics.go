@@ -3,12 +3,11 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"io"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/githubtiger123/loom/platform/internal/dto"
+	"github.com/githubtiger123/loom/platform/internal/k8s/podlog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,24 +94,20 @@ func (c *Client) NotebookLogs(ctx context.Context, ref NotebookRef, query dto.No
 	}
 	logCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	stream, err := c.kube.CoreV1().Pods(ref.Namespace).GetLogs(chosen.Name, &corev1.PodLogOptions{Container: ref.Name,
-		TailLines: &query.TailLines, LimitBytes: &query.LimitBytes, SinceSeconds: &query.SinceSeconds, Previous: query.Previous, Timestamps: true}).Stream(logCtx)
+	stream, err := c.logs.Open(logCtx, podlog.Target{Namespace: ref.Namespace, Pod: chosen.Name, PodUID: string(chosen.UID), Container: ref.Name},
+		podlog.Options{TailLines: query.TailLines, LimitBytes: query.LimitBytes, SinceSeconds: query.SinceSeconds, Previous: query.Previous, Timestamps: true})
 	if err != nil {
 		return nil, err
 	}
 	defer stream.Close()
-	data, err := io.ReadAll(io.LimitReader(stream, query.LimitBytes+1))
+	data, err := podlog.ReadSnapshot(logCtx, stream)
 	if err != nil {
 		return nil, err
 	}
 	if err := c.recheckNotebookPod(ctx, ref, chosen, stsUID); err != nil {
 		return nil, err
 	}
-	truncated := int64(len(data)) >= query.LimitBytes
-	if int64(len(data)) > query.LimitBytes {
-		data = data[:query.LimitBytes]
-	}
-	return &dto.NotebookLogs{Pod: chosen.Name, PodUID: string(chosen.UID), Container: ref.Name, Text: strings.ToValidUTF8(string(data), "�"), Truncated: truncated, ObservedAt: time.Now().UTC()}, nil
+	return &dto.NotebookLogs{Pod: data.Pod, PodUID: data.PodUID, Container: data.Container, Text: data.Text, Truncated: data.Truncated, ObservedAt: data.ObservedAt}, nil
 }
 
 func (c *Client) NotebookEvents(ctx context.Context, ref NotebookRef, limit int) (*dto.NotebookEvents, error) {

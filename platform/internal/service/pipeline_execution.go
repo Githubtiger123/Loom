@@ -404,12 +404,14 @@ type PipelineRuntime struct {
 }
 
 type PipelineRuntimeTask struct {
-	ID        string `json:"taskId"`
-	Name      string `json:"name"`
-	State     string `json:"state"`
-	ParentID  string `json:"parentTaskId"`
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime"`
+	ID          string `json:"taskId"`
+	Name        string `json:"name"`
+	PodName     string `json:"podName"`
+	ExecutionID string `json:"executionId"`
+	State       string `json:"state"`
+	ParentID    string `json:"parentTaskId"`
+	StartTime   string `json:"startTime"`
+	EndTime     string `json:"endTime"`
 }
 
 func (s *Service) PipelineRunRuntime(ctx context.Context, actor, groupID, id uint64) (*PipelineRuntime, error) {
@@ -439,12 +441,14 @@ func (s *Service) PipelineRunRuntime(ctx context.Context, actor, groupID, id uin
 	}
 	var details struct {
 		Tasks []struct {
-			ID        string `json:"task_id"`
-			Name      string `json:"display_name"`
-			State     string `json:"state"`
-			ParentID  string `json:"parent_task_id"`
-			StartTime string `json:"start_time"`
-			EndTime   string `json:"end_time"`
+			ID          string      `json:"task_id"`
+			Name        string      `json:"display_name"`
+			PodName     string      `json:"pod_name"`
+			ExecutionID json.Number `json:"execution_id"`
+			State       string      `json:"state"`
+			ParentID    string      `json:"parent_task_id"`
+			StartTime   string      `json:"start_time"`
+			EndTime     string      `json:"end_time"`
 		} `json:"task_details"`
 	}
 	if len(run.Details) != 0 && json.Unmarshal(run.Details, &details) != nil {
@@ -452,7 +456,7 @@ func (s *Service) PipelineRunRuntime(ctx context.Context, actor, groupID, id uin
 	}
 	out := &PipelineRuntime{ExternalID: run.ID, State: run.State, CreatedAt: run.CreatedAt, FinishedAt: run.FinishedAt, Tasks: []PipelineRuntimeTask{}}
 	for _, task := range details.Tasks {
-		out.Tasks = append(out.Tasks, PipelineRuntimeTask{ID: task.ID, Name: task.Name, State: task.State, ParentID: task.ParentID, StartTime: task.StartTime, EndTime: task.EndTime})
+		out.Tasks = append(out.Tasks, PipelineRuntimeTask{ID: task.ID, Name: task.Name, PodName: task.PodName, ExecutionID: task.ExecutionID.String(), State: task.State, ParentID: task.ParentID, StartTime: task.StartTime, EndTime: task.EndTime})
 	}
 	// 外部读取期间可能撤权或变更实例；返回前重新授权并核对身份。
 	fresh, err := s.PipelineRun(ctx, actor, groupID, id)

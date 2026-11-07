@@ -222,6 +222,6 @@ API 与 pipeline-worker 使用同一配置。API 用于实时详情及限制混�
 
 ## 5. 本轮尚未覆盖
 
-Experiment 管理、向官方 Pipeline/version 目录上传同步、RecurringRun 定时调度、artifact 根输入、平台扩展、多文档包、凭据引用解析、产物下载/MLMD 浏览、节点日志、官方缓存管理接口、无损暂停恢复、失败节点原地 Retry、前端和集群安装不在此次主线范围。可提交新业务运行，也可编辑清理后手动重建；不能借操作重试复用终态 KFP ID。
+Experiment 管理、向官方 Pipeline/version 目录上传同步、RecurringRun 定时调度、artifact 根输入、平台扩展、多文档包、凭据引用解析、产物下载/MLMD 浏览、离线归档日志、官方缓存管理接口、无损暂停恢复、失败节点原地 Retry、前端和集群安装不在此次主线范围。在线节点日志已独立接入 Kubernetes pods/log，需显式应用 000018_pipeline_logs.sql，详见 [公共日志组件](pod-logs.md)。可提交新业务运行，也可编辑清理后手动重建；不能借操作重试复用终态 KFP ID。
 
 核心源码：`internal/infra/kfp/client.go`、`internal/service/pipeline_package.go`、`internal/service/pipeline_execution.go`、`internal/service/pipeline_sync.go`、`internal/worker/pipeline.go`、`internal/config/pipeline.go` 和 `internal/migration/000015_pipeline_kfp.sql`、`000016_pipeline_sync.sql`。本轮未改动官方 KFP 引擎、Notebook 生命周期、Trainer/KServe 实际执行逻辑。

@@ -93,6 +93,7 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "POST /api/v1/groups/{gid}/pipeline-runs/{rid}/start", api.StartPipelineRun)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/attempts", api.PipelineRunAttempts)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/runtime", api.PipelineRunRuntime)
+	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/tasks/{taskId}/logs", api.PipelineTaskLogs)
 	register(mux, api, "DELETE /api/v1/groups/{gid}/pipeline-runs/{rid}", api.DeletePipelineRun)
 	register(mux, api, "POST /api/v1/groups/{gid}/pipeline-runs/{rid}/stop", api.StopPipelineRun)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs/{rid}/history", api.PipelineRunHistory)

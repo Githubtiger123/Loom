@@ -27,11 +27,12 @@ import (
 
 type actorKey struct{}
 type API struct {
-	service  *service.Service
-	identity config.Identity
-	log      *slog.Logger
-	trusted  []netip.Prefix
-	auth     *authn.Manager
+	service    *service.Service
+	identity   config.Identity
+	log        *slog.Logger
+	trusted    []netip.Prefix
+	auth       *authn.Manager
+	logStreams logStreamLimiter
 }
 
 // Endpoint 是请求处理函数，不负责注册路由。
@@ -65,6 +66,10 @@ func (a *API) Wrap(action string, fn Endpoint) http.Handler {
 				cancel()
 			}
 			a.error(w, err)
+			return
+		}
+		if stream, ok := value.(*podLogResponse); ok {
+			a.writePodLogStream(w, r, stream)
 			return
 		}
 		status := http.StatusOK

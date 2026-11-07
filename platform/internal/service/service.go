@@ -30,6 +30,7 @@ type Service struct {
 	PipelineClient      *kfp.Client
 	PipelineConfig      config.Pipeline
 	PipelineVerifier    PipelineSpaceVerifier
+	PipelineLogs        PipelineLogReader
 }
 
 func New(db *gorm.DB, cluster, owner string) *Service {
