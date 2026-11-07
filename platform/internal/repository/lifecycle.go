@@ -28,10 +28,11 @@ type GroupDependencies struct {
 	PipelineRuns     int64 `json:"pipelineRuns"`
 	TrainerJobs      int64 `json:"trainerJobs"`
 	KServeServices   int64 `json:"kserveServices"`
+	Models           int64 `json:"models"`
 }
 
 func (d GroupDependencies) Empty() bool {
-	return d.Notebooks+d.Workspaces+d.LegacyWorkspaces+d.Reservations+d.Pipelines+d.PipelineRuns+d.TrainerJobs+d.KServeServices == 0
+	return d.Notebooks+d.Workspaces+d.LegacyWorkspaces+d.Reservations+d.Pipelines+d.PipelineRuns+d.TrainerJobs+d.KServeServices+d.Models == 0
 }
 func (s *Store) GroupDependencies(ctx context.Context, groupID uint64) (*GroupDependencies, error) {
 	d := &GroupDependencies{}
@@ -50,6 +51,7 @@ func (s *Store) GroupDependencies(ctx context.Context, groupID uint64) (*GroupDe
 		{"SELECT COUNT(*) FROM tb_pipeline_run WHERE group_id=? AND deleted_at IS NULL", &d.PipelineRuns},
 		{"SELECT COUNT(*) FROM tb_trainer_job WHERE group_id=? AND deleted_at IS NULL", &d.TrainerJobs},
 		{"SELECT COUNT(*) FROM tb_kserve_service WHERE group_id=? AND deleted_at IS NULL", &d.KServeServices},
+		{"SELECT COUNT(*) FROM tb_model WHERE group_id=? AND deleted_at IS NULL", &d.Models},
 	}
 	for _, q := range queries {
 		if err := s.query(ctx, false).Raw(q.sql, groupID).Scan(q.dest).Error; err != nil {

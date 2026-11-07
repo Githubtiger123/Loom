@@ -119,6 +119,22 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "GET /api/v1/groups/{gid}/kserve-services/{sid}/revisions", api.KServeRevisions)
 	register(mux, api, "GET /api/v1/groups/{gid}/kserve-services/{sid}/history", api.KServeHistory)
 
+	// 模型注册只保存逻辑模型、版本和外部产物元数据；模型文件不进入 MySQL。
+	register(mux, api, "GET /api/v1/groups/{gid}/models", api.Models)
+	register(mux, api, "POST /api/v1/groups/{gid}/models", api.CreateModel)
+	register(mux, api, "GET /api/v1/groups/{gid}/models/{mid}", api.Model)
+	register(mux, api, "PATCH /api/v1/groups/{gid}/models/{mid}", api.UpdateModel)
+	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/archive", api.ArchiveModel)
+	register(mux, api, "GET /api/v1/groups/{gid}/models/{mid}/versions", api.ModelVersions)
+	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/versions", api.CreateModelVersion)
+	register(mux, api, "GET /api/v1/groups/{gid}/models/{mid}/versions/{vid}", api.ModelVersion)
+	register(mux, api, "PATCH /api/v1/groups/{gid}/models/{mid}/versions/{vid}", api.UpdateModelVersion)
+	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/versions/{vid}/archive", api.ArchiveModelVersion)
+	register(mux, api, "GET /api/v1/groups/{gid}/models/{mid}/versions/{vid}/artifacts", api.ModelArtifacts)
+	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/versions/{vid}/artifacts", api.CreateModelArtifact)
+	register(mux, api, "GET /api/v1/groups/{gid}/models/{mid}/versions/{vid}/artifacts/{aid}", api.ModelArtifact)
+	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/versions/{vid}/artifacts/{aid}/archive", api.ArchiveModelArtifact)
+
 	// 操作单与审计。
 	register(mux, api, "GET /api/v1/operations/{oid}", api.Operation)
 	register(mux, api, "POST /api/v1/operations/{oid}/retry", api.RetryOperation)

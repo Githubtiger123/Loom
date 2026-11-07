@@ -88,7 +88,7 @@ go run ./cmd/platform -cmd=kserve-worker -worker-concurrency=4
 
 本地认证使用 `000005_authentication.sql`（凭据及 session_version）和 `000006_auth_tokens.sql`（Access/Refresh 摘要、轮换/撤销状态及共享限流桶）。须显式迁移后部署，升级不接续旧 Redis 会话，用户需重新登录。首个本地密码通过 `-cmd=set-password -user-id=<实际ID>` 的隐藏终端输入配置，不支持匿名设置密码或将明文放在进程参数中。
 
-新增迁移包括 `000007_auth_sessions.sql`、`000009_workspace_lifecycle.sql` 至 `000020_kserve.sql`（编号 000008 未使用）。迁移按实际文件名排序执行，不要求连续。切换内置 KFP/KServe 前须停止对应旧外部适配器并核查未完操作；`000020` 增加 KServe CR 身份、地址、就绪状态和同步租约投影。本轮未执行任何迁移。
+新增迁移包括 `000007_auth_sessions.sql`、`000009_workspace_lifecycle.sql` 至 `000021_model_registry.sql`（编号 000008 未使用）。迁移按实际文件名排序执行，不要求连续。切换内置 KFP/KServe 前须停止对应旧外部适配器并核查未完操作；`000020` 增加 KServe CR 身份、地址、就绪状态和同步租约投影，`000021` 增加 Model/Version/Artifact 及模型权限。本轮未执行任何迁移。
 
 ## Profile 与授权执行说明
 
@@ -196,5 +196,5 @@ MySQL 驱动统一开启时间解析，连接和会话按 UTC 处理；前端展
 
 ## 下一阶段的闭环顺序
 
-本轮交付范围、接口、升级顺序和外部依赖见 [后端补全说明](docs/backend-completion.md)。Notebook 原生执行、镜像配置、内置 KFP 与 KServe 主线代码已接入；Trainer 实际适配器、集群权限/网关部署及真实联调仍由后续集成完成。前端未改动。
+本轮交付范围、接口、升级顺序和外部依赖见 [后端补全说明](docs/backend-completion.md)。Notebook 原生执行、镜像配置、内置 KFP、KServe 主线与 [模型注册](docs/model-registry.md) 已接入；Trainer 实际适配器、Catalog/上传器、集群权限/网关部署及真实联调仍由后续集成完成。前端未改动。
 不能把数据库存在一行、HTTP 返回 202 或 helper 调用成功当作资源已经就绪。

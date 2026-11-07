@@ -16,6 +16,7 @@
 | Pipeline 终端 | 公共 podexec、组内 pipeline.exec、节点/空间归属校验、WebSocket 输入/输出/缩放、准入与关闭审计 | 需显式 000019 迁移及机器 pods/exec 权限；仅运行中的普通容器和镜像自带 shell，未做前端/独立调试 Pod；见 [终端](pipeline-terminal.md) |
 | Pipeline 日志 | 在线快照/follow、MinIO 离线清单与分段读取、历史和软删除 Run 授权 | 复用 pipeline.logs；无新日志表。采集端需提前上传约定格式，删除不等待归档完成；详见 [离线日志](log-archives.md) |
 | KServe | 服务、不可变修订、MODEL/CUSTOM、修改/部署/停止/删除、Watch 与周期对账 | 内置 kserve-worker 管理结构化 InferenceService；仍需集群 CRD/RBAC 与真实联调 |
+| 模型注册 | Model/Version/Artifact、组与对象权限、CAS 更新、软归档、Pipeline 来源、KServe Artifact 快照 | 模型文件和凭据不进 MySQL；Catalog、上传器、CSI 与前端未实现；见 [模型注册](model-registry.md) |
 | 机器执行桥 | 独立 mTLS listener、领取/续租/回填/回执、证书绑定、外部 ID、单调序号、过时目标隔离 | 不是实际适配器，不保证跨系统 exactly-once；必须按执行桥契约持久幂等并收敛迟到副作用 |
 
 ## 请求受理与运行结果
@@ -37,7 +38,7 @@ Pipeline 和 Trainer 的提交回执只代表已提交，不代表运行成功�
 - Profile/访问/Notebook/空间/目录执行使用原 worker 持久队列。内置 KFP/KServe 分别由独立 pipeline-worker/kserve-worker 领取；Trainer 继续由机器执行桥供外部适配器领取。
 - 源码入口分别位于 `internal/service`、`internal/worker`、`internal/k8s`、`internal/executor`，持久化使用独立 model/repository 和版本化 SQL。
 
-详细契约分别见 [认证](authentication.md)、[Notebook](notebook-api.md)、[生命周期与工作目录](lifecycle-api.md)、[ML 业务](ml-api.md)、[KFP 主线](pipeline-kfp.md)、[机器执行桥](../internal/executor/README.md)。
+详细契约分别见 [认证](authentication.md)、[Notebook](notebook-api.md)、[生命周期与工作目录](lifecycle-api.md)、[ML 业务](ml-api.md)、[KFP 主线](pipeline-kfp.md)、[KServe](kserve.md)、[模型注册](model-registry.md)、[机器执行桥](../internal/executor/README.md)。
 
 ## 升级与配置
 
@@ -57,6 +58,8 @@ Pipeline 和 Trainer 的提交回执只代表已提交，不代表运行成功�
 | 000017_pipeline_edit.sql | 版本原地编辑及修订历史、运行 pendingSpec/清理标记、旧执行快照和编辑权限 |
 | 000018_pipeline_logs.sql | Pipeline 在线日志独立权限及内置角色显式升级；公共 Reader 同时复用至 Notebook 日志快照 |
 | 000019_pipeline_exec.sql | Pipeline 组内终端权限，显式授予内置 owner/editor，不新增终端表 |
+| 000020_kserve.sql | KServe CR 身份、地址、就绪状态和 Watch/GET 同步租约投影 |
+| 000021_model_registry.sql | Model/Version/Artifact 表、模型权限与内置角色显式升级 |
 
 000008 未使用，迁移器不要求编号连续。升级前停止旧认证写入者，禁止旧版认证与新版会话逻辑混跑。显式迁移后再部署新版进程，启动只检查版本和 checksum，不自动建表。既有本地用户下一次登录需改密，成功改密撤销旧会话并重新登录。
 
@@ -70,6 +73,6 @@ KServe 内置 worker 通过 Watch 持续写回健康，并以周期 GET 修复�
 
 Pipeline 后端已补充 [DAG 与节点详情](pipeline-dag.md)，按本次运行快照与官方 MLMD 读取结构、执行实例、错误、参数和产物元数据，不新增业务数据库表。产物下载/可视化、已删除 KFP 执行的完整 DAG 元数据归档仍未包含。
 
-前端、任意历史资源自动迁移、Trainer 实际适配器、受管训练引用解析、KFP Experiment/定时调度/产物下载等完整功能、网关部署、集群 RBAC 安装、MFA/自助找回均不在本轮完成范围。空闲回收也未开启。
+前端、任意历史资源自动迁移、Trainer 实际适配器、受管训练引用解析、Model Catalog/文件上传器/CSI、KFP Experiment/定时调度/产物下载等完整功能、网关部署、集群 RBAC 安装、MFA/自助找回均不在本轮完成范围。空闲回收也未开启。
 
 Notebook 命令行入口现已按 `images.path` 装配镜像目录。Pipeline/KServe 需分别显式启用并部署独立 worker；它们不依赖机器 listener。Trainer 仍需外部适配器，未接执行端时继续等待，不伪造运行结果。

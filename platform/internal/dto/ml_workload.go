@@ -111,10 +111,16 @@ type KServeSpec struct {
 }
 
 type KServeModelSpec struct {
-	StorageURI         string `json:"storageUri"`
-	ModelFormat        string `json:"modelFormat"`
-	ModelFormatVersion string `json:"modelFormatVersion,omitempty"`
-	Runtime            string `json:"runtime,omitempty"`
+	ArtifactID         uint64  `json:"artifactId,omitempty"`
+	RegisteredModelID  uint64  `json:"registeredModelId,omitempty"`
+	ModelVersionID     uint64  `json:"modelVersionId,omitempty"`
+	StorageURI         string  `json:"storageUri,omitempty"`
+	StorageType        string  `json:"storageType,omitempty"`
+	ModelFormat        string  `json:"modelFormat,omitempty"`
+	ModelFormatVersion string  `json:"modelFormatVersion,omitempty"`
+	ArtifactDigest     string  `json:"artifactDigest,omitempty"`
+	ArtifactSizeBytes  *uint64 `json:"artifactSizeBytes,omitempty"`
+	Runtime            string  `json:"runtime,omitempty"`
 }
 
 type KServeCustomSpec struct {
@@ -300,7 +306,7 @@ func (r CreateTrainerJobReq) Validate() error {
 	return r.TrainerJobSpec.Validate()
 }
 
-func (r KServeSpec) Validate() error {
+func (r KServeSpec) validate(request bool) error {
 	if (r.Protocol != "v1" && r.Protocol != "v2") || r.MinReplicas < 1 || r.MaxReplicas < r.MinReplicas || r.MaxReplicas > 128 {
 		return mlInvalid("协议须为 v1/v2，副本须为 1–128 且 max≥min")
 	}
@@ -309,11 +315,33 @@ func (r KServeSpec) Validate() error {
 	}
 	switch r.DeploymentType {
 	case "MODEL":
-		if r.Model == nil || !validator.IsKServeStorageURI(r.Model.StorageURI) ||
-			!validator.IsKServeModelFormat(r.Model.ModelFormat) ||
-			!validator.IsKServeModelVersion(r.Model.ModelFormatVersion) ||
-			(r.Model.Runtime != "" && !validator.IsDNS1123Subdomain(r.Model.Runtime)) {
+		if r.Model == nil || (r.Model.Runtime != "" && !validator.IsDNS1123Subdomain(r.Model.Runtime)) {
 			return mlInvalid("MODEL 的存储地址、模型格式、格式版本或受控 Runtime 名称无效")
+		}
+		m := r.Model
+		if m.ArtifactID != 0 && request {
+			if m.RegisteredModelID != 0 || m.ModelVersionID != 0 || m.StorageURI != "" || m.StorageType != "" ||
+				m.ModelFormat != "" || m.ModelFormatVersion != "" || m.ArtifactDigest != "" || m.ArtifactSizeBytes != nil {
+				return mlInvalid("使用 artifactId 时不能提交由模型注册中心维护的派生字段")
+			}
+			break
+		}
+		if m.ArtifactID != 0 {
+			if m.RegisteredModelID == 0 || m.ModelVersionID == 0 ||
+				!validator.IsModelArtifactURI(m.StorageURI, m.StorageType) ||
+				!validator.IsKServeModelFormat(m.ModelFormat) ||
+				!validator.IsKServeModelVersion(m.ModelFormatVersion) ||
+				(m.ArtifactDigest != "" && !validator.IsSHA256(m.ArtifactDigest)) {
+				return mlInvalid("模型注册中心产物快照无效或不受 KServe 支持")
+			}
+			break
+		}
+		if m.RegisteredModelID != 0 || m.ModelVersionID != 0 || m.StorageType != "" ||
+			m.ArtifactDigest != "" || m.ArtifactSizeBytes != nil ||
+			!validator.IsKServeStorageURI(m.StorageURI) ||
+			!validator.IsKServeModelFormat(m.ModelFormat) ||
+			!validator.IsKServeModelVersion(m.ModelFormatVersion) {
+			return mlInvalid("MODEL 的直接存储地址、模型格式或格式版本无效")
 		}
 	case "CUSTOM":
 		if r.Custom == nil || !validator.IsNotebookImageReference(r.Custom.Image) ||
@@ -328,16 +356,23 @@ func (r KServeSpec) Validate() error {
 	return r.Resources.Validate()
 }
 
+// ValidateRequest accepts artifactId as a lookup reference but rejects caller-
+// supplied registry snapshots. The service resolves and freezes those fields.
+func (r KServeSpec) ValidateRequest() error { return r.validate(true) }
+
+// Validate is used by the executor and only accepts a complete immutable spec.
+func (r KServeSpec) Validate() error { return r.validate(false) }
+
 func (r CreateKServeReq) Validate() error {
 	if !validator.IsDNS1123Label(r.Name) {
 		return mlInvalid("服务名称须为最长 63 字符的 DNS label")
 	}
-	return r.KServeSpec.Validate()
+	return r.KServeSpec.ValidateRequest()
 }
 
 func (r UpdateKServeReq) Validate() error {
 	if r.Revision == 0 {
 		return mlInvalid("必须提供 revision")
 	}
-	return r.KServeSpec.Validate()
+	return r.KServeSpec.ValidateRequest()
 }

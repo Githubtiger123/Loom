@@ -341,7 +341,11 @@ func (s *Service) CreateKServe(ctx context.Context, actor, groupID uint64, key s
 			if err != nil {
 				return err
 			}
-			b, err := json.Marshal(in.KServeSpec)
+			resolved, err := s.resolveKServeModelSpec(ctx, st, actor, groupID, in.KServeSpec)
+			if err != nil {
+				return err
+			}
+			b, err := json.Marshal(resolved)
 			if err != nil {
 				return err
 			}
@@ -419,7 +423,11 @@ func (s *Service) UpdateKServe(ctx context.Context, actor, groupID, id uint64, k
 			if err != nil {
 				return err
 			}
-			b, err := json.Marshal(in.KServeSpec)
+			resolved, err := s.resolveKServeModelSpec(ctx, st, actor, groupID, in.KServeSpec)
+			if err != nil {
+				return err
+			}
+			b, err := json.Marshal(resolved)
 			if err != nil {
 				return err
 			}
@@ -457,6 +465,13 @@ func (s *Service) DeployKServe(ctx context.Context, actor, groupID, id uint64, k
 			}
 			v, err := st.KServeRevision(ctx, groupID, id, in.RevisionID)
 			if err != nil {
+				return err
+			}
+			var spec dto.KServeSpec
+			if err := json.Unmarshal(v.Spec, &spec); err != nil {
+				return apperr.Wrap(apperr.CodeInternal, "KServe 配置修订无法读取", err)
+			}
+			if err := s.verifyKServeArtifactSnapshot(ctx, st, actor, groupID, spec); err != nil {
 				return err
 			}
 			*n.configID, n.state.RequestedSpec, n.state.DesiredState = v.ID, v.Spec, "SERVING"

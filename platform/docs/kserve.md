@@ -13,6 +13,8 @@ Loom 的 `tb_kserve_service` 保存业务所有权、当前配置、期望/观�
 
 执行身份取 `kserve.service_account`，部署模式首期固定 `Standard`。模型存储凭据必须由该 ServiceAccount 和集群运维预先配置，业务请求不能携带明文凭据或 Secret 名称。
 
+`MODEL` 推荐提交 Loom `artifactId`。API 在业务事务内解析 Model Registry，并把模型、版本、产物 ID、真实 URI、格式、摘要和大小冻结进不可变 KServe revision；worker 不在运行时查询 Registry。直接提交 `storageUri` 的兼容方式仍保留。模型注册流程见 [模型注册与 KServe 集成](model-registry.md)。
+
 ## 创建与发布
 
 创建业务服务会同时生成 revision 1 和持久操作单。`kserve-worker` 领取后先复核用户授权、组状态、Profile/namespace UID，再按 namespace + 业务名称读取 CR：
@@ -23,6 +25,8 @@ Loom 的 `tb_kserve_service` 保存业务所有权、当前配置、期望/观�
 4. CR UID 写入 `external_id`；只有 `status.observedGeneration >= metadata.generation` 且 Ready=True 才确认该 revision 为 SERVING。
 
 PATCH 只产生新配置修订并推进业务 CAS revision，不修改当前 CR，不受服务正在运行还是已停止影响。`deploy` 可选择任一保留的 `revisionId`，生成新的业务 revision 后才发布。运行状态同步按 `appliedRevision` 核对当前 CR，因此保存草稿不会把线上 CR 误报为漂移。
+
+使用 Registry Artifact 的历史 revision 在每次 deploy 前都会重新检查 Artifact 是否仍有效且所属 Version 为 READY。归档模型不会中断已运行服务，但会阻止以后再次部署该 Artifact。
 
 ## 停止、重新发布与删除
 

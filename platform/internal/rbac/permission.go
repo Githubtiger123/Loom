@@ -15,7 +15,7 @@ func Permissions() []model.Permission {
 	for _, entry := range []struct{ scope, codes string }{
 		{"global", "user.read user.manage role.manage group.create group.quota.update audit.read"},
 		{"group", "pipeline.update pipeline.version.update pipeline.logs pipeline.exec"},
-		{"group", "group.read group.update group.delete group.disable group.restore group.member.manage group.owner.transfer group.quota.read notebook.create notebook.read notebook.read.any notebook.update notebook.delete notebook.stop notebook.start notebook.connect notebook.transfer notebook.transfer.any workspace.read workspace.attach workspace.delete workspace.transfer workspace.manage.any pipeline.create pipeline.read pipeline.read.any pipeline.version.create pipeline.run pipeline.stop pipeline.delete trainer.create trainer.read trainer.read.any trainer.stop trainer.delete kserve.create kserve.read kserve.read.any kserve.update kserve.deploy kserve.stop kserve.delete"},
+		{"group", "group.read group.update group.delete group.disable group.restore group.member.manage group.owner.transfer group.quota.read notebook.create notebook.read notebook.read.any notebook.update notebook.delete notebook.stop notebook.start notebook.connect notebook.transfer notebook.transfer.any workspace.read workspace.attach workspace.delete workspace.transfer workspace.manage.any pipeline.create pipeline.read pipeline.read.any pipeline.version.create pipeline.run pipeline.stop pipeline.delete trainer.create trainer.read trainer.read.any trainer.stop trainer.delete kserve.create kserve.read kserve.read.any kserve.update kserve.deploy kserve.stop kserve.delete model.create model.read model.read.any model.update model.version.create model.version.update model.artifact.create model.archive"},
 	} {
 		for _, code := range strings.Fields(entry.codes) {
 			result = append(result, model.Permission{Code: code, Name: code, Scope: entry.scope, Module: strings.SplitN(code, ".", 2)[0]})
@@ -37,14 +37,14 @@ func BuiltinPermissionCodes(role string) []string {
 		case "group_editor":
 			allow = p.Scope == "group" && (p.Code == "group.read" || p.Code == "group.quota.read" ||
 				strings.HasPrefix(p.Code, "notebook.") || strings.HasPrefix(p.Code, "workspace.") ||
-				strings.HasPrefix(p.Code, "pipeline.") || strings.HasPrefix(p.Code, "trainer.") || strings.HasPrefix(p.Code, "kserve."))
+				strings.HasPrefix(p.Code, "pipeline.") || strings.HasPrefix(p.Code, "trainer.") || strings.HasPrefix(p.Code, "kserve.") || strings.HasPrefix(p.Code, "model."))
 			if p.Code == "workspace.manage.any" || p.Code == "notebook.transfer.any" ||
-				p.Code == "pipeline.read.any" || p.Code == "trainer.read.any" || p.Code == "kserve.read.any" {
+				p.Code == "pipeline.read.any" || p.Code == "trainer.read.any" || p.Code == "kserve.read.any" || p.Code == "model.read.any" {
 				allow = false
 			}
 		case "group_viewer":
 			allow = p.Scope == "group" && (p.Code == "group.read" || p.Code == "group.quota.read" ||
-				p.Code == "notebook.read" || p.Code == "workspace.read" || p.Code == "pipeline.read" || p.Code == "trainer.read" || p.Code == "kserve.read")
+				p.Code == "notebook.read" || p.Code == "workspace.read" || p.Code == "pipeline.read" || p.Code == "trainer.read" || p.Code == "kserve.read" || p.Code == "model.read")
 		}
 		if allow {
 			result = append(result, p.Code)

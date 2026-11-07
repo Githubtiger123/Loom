@@ -1,4 +1,4 @@
-# Pipeline、Trainer、KServe 后端业务接口
+# Pipeline、Trainer、KServe 与模型注册后端业务接口
 
 本文描述已写入的后端源码契约，未测试、编译、运行或执行迁移。Pipeline 已补入内置官方 KFP v2 主线，KServe 已补入内置 CR 执行与状态同步，详见 [KFP 流程与边界](pipeline-kfp.md) 和 [KServe 主线](kserve.md)；Trainer 实际适配器和前端仍未实现。
 
@@ -10,9 +10,9 @@
 - 查询返回 `{"data": ...}`；资源列表 data 为 `{"items": [], "nextAfter": ...}`，历史、版本修订和执行快照接口返回 data 数组（以各接口约定为准）。分页使用 `after`、`limit`，默认只查询本人资源；`scope=all/unowned` 额外要求对应模块的 `read.any`。
 - 默认不列出已删除或归档对象，可用 `includeDeleted=true`。详情、版本、历史及操作单仍执行当前授权，不因曾经创建过对象而绕过撤权。
 - `202/PENDING` 只代表持久受理，必须看操作单及对象 `desiredState/observedState/revision/appliedRevision`。同步完成的元数据操作返回 `200`，不表示外部工作负载已运行。
-- 三模块分别使用 `pipeline.*`、`trainer.*`、`kserve.*` 权限；跨负责人访问还需相应 `read.any`。执行前仍会重查启动请求人的状态和权限。
+- 四个业务模块分别使用 `pipeline.*`、`trainer.*`、`kserve.*`、`model.*` 权限；跨负责人访问还需相应 `read.any`。工作负载执行前仍会重查启动请求人的状态和权限。
 
-Trainer 引用字段只接受受管标识，不接受 URL、任意 Secret 名、明文凭据或任意 Kubernetes PodSpec。KServe 只接受受限模型 storage URI 或容器镜像及少量结构化字段；存储凭据由固定 ServiceAccount 提供。Pipeline 内置模式允许导入官方编译 IR，不执行用户 Python，也不由用户指定 KFP 端点、运行 SA 或存储根路径。
+Trainer 引用字段只接受受管标识，不接受 URL、任意 Secret 名、明文凭据或任意 Kubernetes PodSpec。KServe 只接受已登记的 Artifact、受限模型 storage URI 或容器镜像及少量结构化字段；存储凭据由固定 ServiceAccount 提供。Pipeline 内置模式允许导入官方编译 IR，不执行用户 Python，也不由用户指定 KFP 端点、运行 SA 或存储根路径。
 
 ## Pipeline
 
@@ -131,11 +131,17 @@ MODEL 创建示例：
 }
 ```
 
+推荐使用模型注册产物替代直接 URI：`"model":{"artifactId":7}`。后端会核对 Model/Version/Artifact 状态与对象权限，并将完整产物元数据冻结进 KServe 配置修订；接口和生命周期见 [模型注册](model-registry.md)。直接 URI 方式继续兼容。
+
 CUSTOM 使用同一外层字段，将 `deploymentType` 设为 `CUSTOM`，并提供 `custom`：`{"image":"registry.example.com/team/server:v1","command":["/app/server"],"args":["--port=8080"],"port":8080,"healthPath":"/ready"}`。两类配置严格互斥；不接受任意 YAML、ServiceAccount、Secret、Volume 或 securityContext。
 
 PATCH 提交完整规格并加当前 `revision`，只产生不可变修订，不修改正在运行的 CR。部署使用 `{"revision":2,"revisionId":1}`，显式选择要发布的历史配置修订；停止和删除使用当前 revision。发布受理不等于 Ready，需继续读取业务状态。
 
 启用 `kserve.enabled` 后，独立 kserve-worker 使用固定 ServiceAccount 和 Standard 部署模式创建/更新 CR。停止会删除 `InferenceService`，确认 GET 404 后清空当前 UID 绑定，但保留业务配置和历史；再次部署创建新 CR 并绑定新 UID。删除业务服务同样先确认 CR 不存在，再软删除业务记录。Watch 实时同步 Ready、generation、URL 和错误，周期 GET 负责断线修复；历史 SERVING 不等于当前仍健康。详见 [KServe 主线](kserve.md)。
+
+## 模型注册
+
+Loom 按 Model、Version、Artifact 三层保存组内模型业务元数据，模型文件仍在 S3、GCS、PVC 或 OCI。Version 从 DRAFT 开始，有有效 Artifact 后才能切换 READY；Artifact 不允许原地修改。模型、版本和产物提供列表、详情、CAS 更新或归档接口，全部复用当前组权限、对象 owner、幂等操作单和审计。完整 API、请求示例、归档级联和 KServe 快照规则见 [模型注册与 KServe 集成](model-registry.md)。
 
 ## 操作、空间与执行适配器
 
