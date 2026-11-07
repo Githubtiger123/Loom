@@ -32,6 +32,8 @@
 | GET | `/pipeline-runs/{rid}/attempts` | 已清理的旧执行快照 |
 | GET | `/pipeline-runs/{rid}/runtime` | 官方实时运行及经筛选的节点状态 |
 | GET | `/pipeline-runs/{rid}/tasks/{taskId}/logs` | 节点在线容器日志快照 / follow 流 |
+| GET | `/pipeline-runs/{rid}/log-archives` | 当前或指定历史 instanceId 的 MinIO 归档清单，需 pipeline.logs |
+| GET | `/pipeline-runs/{rid}/log-archives/{entryId}` | 指定 instanceId / etag，按 offset / limitBytes 分段读取离线日志，详见 [离线日志](log-archives.md) |
 | POST | `/pipeline-runs/{rid}/stop` | 请求停止 |
 | GET | `/pipeline-runs/{rid}/history` | 操作历史 |
 

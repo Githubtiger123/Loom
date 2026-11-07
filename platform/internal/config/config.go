@@ -21,18 +21,19 @@ import (
 
 // Config 是平台配置的根结构。
 type Config struct {
-	Server   Server   `yaml:"server"`
-	DB       DB       `yaml:"db"`
-	Redis    Redis    `yaml:"redis"`
-	MQ       MQ       `yaml:"mq"`
-	K8s      K8s      `yaml:"k8s"`
-	Istio    Istio    `yaml:"istio"`
-	Identity Identity `yaml:"identity"`
-	Auth     Auth     `yaml:"auth"`
-	Executor Executor `yaml:"executor"`
-	Images   Images   `yaml:"images"`
-	Pipeline Pipeline `yaml:"pipeline"`
-	Log      Log      `yaml:"log"`
+	Server     Server     `yaml:"server"`
+	DB         DB         `yaml:"db"`
+	Redis      Redis      `yaml:"redis"`
+	MQ         MQ         `yaml:"mq"`
+	K8s        K8s        `yaml:"k8s"`
+	Istio      Istio      `yaml:"istio"`
+	Identity   Identity   `yaml:"identity"`
+	Auth       Auth       `yaml:"auth"`
+	Executor   Executor   `yaml:"executor"`
+	Images     Images     `yaml:"images"`
+	Pipeline   Pipeline   `yaml:"pipeline"`
+	Log        Log        `yaml:"log"`
+	LogArchive LogArchive `yaml:"log_archive"`
 }
 
 // Server 是 HTTP 服务参数。
@@ -192,7 +193,8 @@ func Default() *Config {
 		Images:   Images{Path: "configs/images.yaml"},
 		Pipeline: Pipeline{ServiceAccount: "default-editor", Timeout: Duration(15 * time.Second), PollInterval: Duration(15 * time.Second),
 			SyncInterval: Duration(5 * time.Second), TerminalSyncInterval: Duration(5 * time.Minute), SyncConcurrency: 2, SyncQPS: 10},
-		Log: Log{Level: "info"},
+		Log:        Log{Level: "info"},
+		LogArchive: LogArchive{Prefix: "logs", Region: "us-east-1", Timeout: Duration(15 * time.Second)},
 	}
 }
 
@@ -321,6 +323,15 @@ func applyEnv(c *Config) {
 	envDuration(&c.Auth.AccessTTL, "LOOM_AUTH_ACCESS_TTL")
 	envDuration(&c.Auth.SessionTTL, "LOOM_AUTH_SESSION_TTL")
 	envStr(&c.Log.Level, "LOOM_LOG_LEVEL")
+	envBool(&c.LogArchive.Enabled, "LOOM_LOG_ARCHIVE_ENABLED")
+	envStr(&c.LogArchive.Endpoint, "LOOM_LOG_ARCHIVE_ENDPOINT")
+	envStr(&c.LogArchive.Bucket, "LOOM_LOG_ARCHIVE_BUCKET")
+	envStr(&c.LogArchive.Prefix, "LOOM_LOG_ARCHIVE_PREFIX")
+	envStr(&c.LogArchive.Region, "LOOM_LOG_ARCHIVE_REGION")
+	envStr(&c.LogArchive.AccessKey, "LOOM_LOG_ARCHIVE_ACCESS_KEY")
+	envStr(&c.LogArchive.SecretKey, "LOOM_LOG_ARCHIVE_SECRET_KEY")
+	envStr(&c.LogArchive.SessionToken, "LOOM_LOG_ARCHIVE_SESSION_TOKEN")
+	envDuration(&c.LogArchive.Timeout, "LOOM_LOG_ARCHIVE_TIMEOUT")
 }
 
 func envStr(dst *string, key string) {

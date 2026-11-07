@@ -8,6 +8,7 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/config"
 	"github.com/githubtiger123/loom/platform/internal/dto"
 	"github.com/githubtiger123/loom/platform/internal/infra/kfp"
+	"github.com/githubtiger123/loom/platform/internal/infra/logarchive"
 	"github.com/githubtiger123/loom/platform/internal/k8s"
 	"github.com/githubtiger123/loom/platform/internal/service"
 )
@@ -28,6 +29,18 @@ func configurePipeline(base *service.Service, cfg config.Pipeline) {
 	if cfg.Enabled {
 		base.PipelineClient = kfp.New(cfg.Endpoint, cfg.TokenFile, cfg.Timeout.Std())
 	}
+}
+
+func configureLogArchive(base *service.Service, cfg config.LogArchive) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	reader, err := logarchive.New(cfg)
+	if err != nil {
+		return err
+	}
+	base.PipelineLogArchivesReader = reader
+	return nil
 }
 
 type boundPipelineVerifier struct {

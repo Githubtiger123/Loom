@@ -13,6 +13,7 @@
 | 空间 / 用户 | 停用、恢复、安全删除；成员移除和用户禁用生成 Notebook 停止任务、保留数据并等待撤权 | 固定 Profile Owner 始终为配置中的 admin 身份；有 live ML 时先显式停止，当前不自动取消训练 |
 | Pipeline | 定义、IR 导入/版本原地编辑、修订历史、参数解析、运行快照、内置 KFP 提交/停止/删除/状态轮询、运行编辑清理后手动重建、节点详情、本地查询投影 | 需兼容客户端确定性 Run ID 的官方 KFP 与独立 pipeline-worker；只接入单文档 v2 IR 主线 |
 | Trainer | 训练规格、创建/停止/删除、分页、历史、操作单 | 外部 Trainer 适配器负责受管 runtime/code/data/output 解析和提交 |
+| Pipeline 日志 | 在线快照/follow、MinIO 离线清单与分段读取、历史和软删除 Run 授权 | 复用 pipeline.logs；无新日志表。采集端需提前上传约定格式，删除不等待归档完成；详见 [离线日志](log-archives.md) |
 | KServe | 服务、不可变修订、修改/部署/停止/删除、历史 | 外部适配器负责 model/runtime 解析、真实部署与观测 |
 | 机器执行桥 | 独立 mTLS listener、领取/续租/回填/回执、证书绑定、外部 ID、单调序号、过时目标隔离 | 不是实际适配器，不保证跨系统 exactly-once；必须按执行桥契约持久幂等并收敛迟到副作用 |
 

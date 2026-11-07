@@ -22,6 +22,9 @@ func RequiredText(value string, max int) bool {
 func IsDNS1123Label(value string) bool {
 	return len(kvalidation.IsDNS1123Label(value)) == 0
 }
+func IsDNS1123Subdomain(value string) bool {
+	return len(kvalidation.IsDNS1123Subdomain(value)) == 0
+}
 func IsRoleCode(value string) bool   { return roleCode.MatchString(value) }
 func IsLabelKey(value string) bool   { return len(kvalidation.IsQualifiedName(value)) == 0 }
 func IsLabelValue(value string) bool { return len(kvalidation.IsValidLabelValue(value)) == 0 }

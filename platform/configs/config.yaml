@@ -119,5 +119,16 @@ executor:
   client_ca: ""
   client_cert_sha256: []
 
+# 只读离线日志；采集端需提前上传日志和 manifest.json，详见 docs/log-archives.md。
+# 不依赖 pipeline.enabled，不创建桶、不写数据库日志索引。
+log_archive:
+  enabled: false
+  endpoint: "http://minio.kubeflow.svc.cluster.local:9000"
+  bucket: "loom-logs"
+  prefix: "logs"
+  region: "us-east-1"
+  timeout: 15s
+  # access_key / secret_key / session_token 通过 LOOM_LOG_ARCHIVE_* 环境变量注入。
+
 log:
   level: "info" # debug | info | warn | error

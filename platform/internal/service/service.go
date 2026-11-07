@@ -20,17 +20,18 @@ import (
 )
 
 type Service struct {
-	DB                  *gorm.DB
-	Store               *repository.Store
-	Cluster             string
-	InfrastructureOwner string
-	QuotaReader         QuotaReader
-	NotebookReader      NotebookReader
-	NotebookImages      *config.NotebookImageCatalog
-	PipelineClient      *kfp.Client
-	PipelineConfig      config.Pipeline
-	PipelineVerifier    PipelineSpaceVerifier
-	PipelineLogs        PipelineLogReader
+	DB                        *gorm.DB
+	Store                     *repository.Store
+	Cluster                   string
+	InfrastructureOwner       string
+	QuotaReader               QuotaReader
+	NotebookReader            NotebookReader
+	NotebookImages            *config.NotebookImageCatalog
+	PipelineClient            *kfp.Client
+	PipelineConfig            config.Pipeline
+	PipelineVerifier          PipelineSpaceVerifier
+	PipelineLogs              PipelineLogReader
+	PipelineLogArchivesReader PipelineLogArchiveReader
 }
 
 func New(db *gorm.DB, cluster, owner string) *Service {

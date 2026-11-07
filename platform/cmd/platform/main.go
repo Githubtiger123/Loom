@@ -379,6 +379,9 @@ func runAPI(ctx context.Context, cfg *config.Config, logger *slog.Logger, d *dep
 	businessService := newBusinessService(service.New(d.db, cfg.K8s.Cluster, cfg.K8s.InfrastructureOwner), k8sClient)
 	businessService.NotebookImages = notebookImages
 	configurePipeline(businessService, cfg.Pipeline)
+	if err := configureLogArchive(businessService, cfg.LogArchive); err != nil {
+		return err
+	}
 	api := handler.New(businessService, cfg.Identity, logger, authentication)
 	business := route.New(api)
 	srv := &http.Server{
