@@ -141,6 +141,9 @@ func (c *Config) Validate() error {
 	if err := c.Pipeline.Validate(); err != nil {
 		return err
 	}
+	if err := c.KServe.Validate(); err != nil {
+		return err
+	}
 	if err := c.LogArchive.Validate(); err != nil {
 		return err
 	}

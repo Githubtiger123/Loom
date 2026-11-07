@@ -11,6 +11,7 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/apperr"
 	"github.com/githubtiger123/loom/platform/internal/config"
 	"github.com/githubtiger123/loom/platform/internal/infra/kfp"
+	"github.com/githubtiger123/loom/platform/internal/k8s"
 	"github.com/githubtiger123/loom/platform/internal/model"
 	"github.com/githubtiger123/loom/platform/internal/rbac"
 	"github.com/githubtiger123/loom/platform/internal/repository"
@@ -34,6 +35,9 @@ type Service struct {
 	PipelineLogs              PipelineLogReader
 	PipelineTerminal          PipelineTerminalClient
 	PipelineLogArchivesReader PipelineLogArchiveReader
+	KServeClient              *k8s.Client
+	KServeConfig              config.KServe
+	KServeVerifier            KServeSpaceVerifier
 }
 
 func New(db *gorm.DB, cluster, owner string) *Service {

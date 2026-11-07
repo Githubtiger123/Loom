@@ -15,7 +15,7 @@
 | Trainer | 训练规格、创建/停止/删除、分页、历史、操作单 | 外部 Trainer 适配器负责受管 runtime/code/data/output 解析和提交 |
 | Pipeline 终端 | 公共 podexec、组内 pipeline.exec、节点/空间归属校验、WebSocket 输入/输出/缩放、准入与关闭审计 | 需显式 000019 迁移及机器 pods/exec 权限；仅运行中的普通容器和镜像自带 shell，未做前端/独立调试 Pod；见 [终端](pipeline-terminal.md) |
 | Pipeline 日志 | 在线快照/follow、MinIO 离线清单与分段读取、历史和软删除 Run 授权 | 复用 pipeline.logs；无新日志表。采集端需提前上传约定格式，删除不等待归档完成；详见 [离线日志](log-archives.md) |
-| KServe | 服务、不可变修订、修改/部署/停止/删除、历史 | 外部适配器负责 model/runtime 解析、真实部署与观测 |
+| KServe | 服务、不可变修订、MODEL/CUSTOM、修改/部署/停止/删除、Watch 与周期对账 | 内置 kserve-worker 管理结构化 InferenceService；仍需集群 CRD/RBAC 与真实联调 |
 | 机器执行桥 | 独立 mTLS listener、领取/续租/回填/回执、证书绑定、外部 ID、单调序号、过时目标隔离 | 不是实际适配器，不保证跨系统 exactly-once；必须按执行桥契约持久幂等并收敛迟到副作用 |
 
 ## 请求受理与运行结果
@@ -34,7 +34,7 @@ Pipeline 和 Trainer 的提交回执只代表已提交，不代表运行成功�
 
 - 所有业务和机器 URL 注册仍在 `internal/route/route.go`。`route.New` 是用户入口，`route.NewExecutor` 仅挂独立机器 mTLS 监听，公网 mux 不注册内部路径。
 - `cmd/platform/main.go` 装配 API、worker、pipeline-worker、sync、cron；`business_dependencies.go` 注入额度、Notebook 只读客户端和 KFP 空间身份核验器。
-- Profile/访问/Notebook/空间/目录执行使用原 worker 持久队列。内置 KFP 启用后由独立 pipeline-worker 领取 Pipeline 动作；Trainer/KServe 由机器执行桥供外部适配器领取，不混入原 Kubernetes worker。
+- Profile/访问/Notebook/空间/目录执行使用原 worker 持久队列。内置 KFP/KServe 分别由独立 pipeline-worker/kserve-worker 领取；Trainer 继续由机器执行桥供外部适配器领取。
 - 源码入口分别位于 `internal/service`、`internal/worker`、`internal/k8s`、`internal/executor`，持久化使用独立 model/repository 和版本化 SQL。
 
 详细契约分别见 [认证](authentication.md)、[Notebook](notebook-api.md)、[生命周期与工作目录](lifecycle-api.md)、[ML 业务](ml-api.md)、[KFP 主线](pipeline-kfp.md)、[机器执行桥](../internal/executor/README.md)。
@@ -64,12 +64,12 @@ Notebook 独立主机配置 `auth.notebook_origin`，须为不同 hostname 的 H
 
 机器入口由 `executor.enabled` 显式开启，配置独立地址、服务证书/私钥、客户端 CA 和客户端完整叶证书 DER 的 SHA256 指纹。只允许 TLS1.3 和双向证书认证，不接收用户 JWT 或转发证书头。两监听任一失败会触发共同关闭。
 
-KServe 部署完成后可用机器 `/internal/v1/ml-executions/{oid}/observe` 持续回报健康，独立序号不重新开启部署操作，不允许修改外部 UID。当前 stop 合同要求适配器确认停止服务且保留原生 UID；仅支持通过删除来停用的运行环境不能虚报 STOPPED，应显式删除旧业务服务再新建。观测时间不再新鲜时不能将历史 SERVING 当成实时健康证明。
+KServe 内置 worker 通过 Watch 持续写回健康，并以周期 GET 修复漏事件。停止会删除 CR，确认不存在后清空当前 UID 绑定；后续显式发布可绑定新 UID。观测时间不再新鲜时不能将历史 SERVING 当成实时健康证明。
 
 ## 未包含内容
 
 Pipeline 后端已补充 [DAG 与节点详情](pipeline-dag.md)，按本次运行快照与官方 MLMD 读取结构、执行实例、错误、参数和产物元数据，不新增业务数据库表。产物下载/可视化、已删除 KFP 执行的完整 DAG 元数据归档仍未包含。
 
-前端、镜像管理接口、任意历史资源自动迁移、Trainer/KServe 实际适配器、受管引用解析、KFP Experiment/定时调度/产物下载等完整功能、网关部署、集群 RBAC 安装、MFA/自助找回、LIST/WATCH 游标均不在本轮完成范围。空闲回收也未开启：没有可信 kernel 活动源时不能根据页面访问或旧 annotation 自动停机。
+前端、任意历史资源自动迁移、Trainer 实际适配器、受管训练引用解析、KFP Experiment/定时调度/产物下载等完整功能、网关部署、集群 RBAC 安装、MFA/自助找回均不在本轮完成范围。空闲回收也未开启。
 
-Notebook 命令行入口现已按 `images.path` 装配镜像目录，配置细节见 [镜像配置](notebook-images.md)。配置不能替代镜像拉取、运行和网关联调。Pipeline 需显式启用 `pipeline.enabled` 并独立部署 pipeline-worker；它不依赖机器 listener。Trainer/KServe 仍需部署外部适配器，未接执行端时继续等待，不伪造运行结果。
+Notebook 命令行入口现已按 `images.path` 装配镜像目录。Pipeline/KServe 需分别显式启用并部署独立 worker；它们不依赖机器 listener。Trainer 仍需外部适配器，未接执行端时继续等待，不伪造运行结果。

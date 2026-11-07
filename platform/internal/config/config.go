@@ -32,6 +32,7 @@ type Config struct {
 	Executor   Executor   `yaml:"executor"`
 	Images     Images     `yaml:"images"`
 	Pipeline   Pipeline   `yaml:"pipeline"`
+	KServe     KServe     `yaml:"kserve"`
 	Log        Log        `yaml:"log"`
 	LogArchive LogArchive `yaml:"log_archive"`
 }
@@ -193,6 +194,8 @@ func Default() *Config {
 		Images:   Images{Path: "configs/images.yaml"},
 		Pipeline: Pipeline{ServiceAccount: "default-editor", Timeout: Duration(15 * time.Second), PollInterval: Duration(15 * time.Second),
 			SyncInterval: Duration(5 * time.Second), TerminalSyncInterval: Duration(5 * time.Minute), SyncConcurrency: 2, SyncQPS: 10},
+		KServe: KServe{ServiceAccount: "default-editor", DeploymentMode: "Standard", PollInterval: Duration(10 * time.Second),
+			ResyncInterval: Duration(5 * time.Minute), SyncConcurrency: 2, SyncQPS: 10},
 		Log:        Log{Level: "info"},
 		LogArchive: LogArchive{Prefix: "logs", Region: "us-east-1", Timeout: Duration(15 * time.Second)},
 	}
@@ -305,6 +308,13 @@ func applyEnv(c *Config) {
 	envDuration(&c.Pipeline.TerminalSyncInterval, "LOOM_PIPELINE_TERMINAL_SYNC_INTERVAL")
 	envInt(&c.Pipeline.SyncConcurrency, "LOOM_PIPELINE_SYNC_CONCURRENCY")
 	envInt(&c.Pipeline.SyncQPS, "LOOM_PIPELINE_SYNC_QPS")
+	envBool(&c.KServe.Enabled, "LOOM_KSERVE_ENABLED")
+	envStr(&c.KServe.ServiceAccount, "LOOM_KSERVE_SERVICE_ACCOUNT")
+	envStr(&c.KServe.DeploymentMode, "LOOM_KSERVE_DEPLOYMENT_MODE")
+	envDuration(&c.KServe.PollInterval, "LOOM_KSERVE_POLL_INTERVAL")
+	envDuration(&c.KServe.ResyncInterval, "LOOM_KSERVE_RESYNC_INTERVAL")
+	envInt(&c.KServe.SyncConcurrency, "LOOM_KSERVE_SYNC_CONCURRENCY")
+	envInt(&c.KServe.SyncQPS, "LOOM_KSERVE_SYNC_QPS")
 	envBool(&c.Auth.Enabled, "LOOM_AUTH_ENABLED")
 	envStr(&c.Auth.Issuer, "LOOM_AUTH_ISSUER")
 	envStr(&c.Auth.Audience, "LOOM_AUTH_AUDIENCE")

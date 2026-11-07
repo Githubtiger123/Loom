@@ -214,7 +214,7 @@ API 与 pipeline-worker 使用同一配置。API 用于实时详情及限制混�
 
 对照的是工作区当前 KFP v2beta1 协议，其中 Run 含 namespace；不是宣称兼容所有历史 KFP 版本。部署前需核对官方返回字段、身份认证及命名空间隔离。响应缺少身份信息时拒绝绑定，不降级为跨空间查询。
 
-上线顺序：停止旧 Pipeline 写入者并核对未完运行 → 确认部署的 KFP 支持客户端 `run_id` 与同 ID 幂等恢复 → 按顺序显式执行 `000015_pipeline_kfp.sql`、`000016_pipeline_sync.sql`、`000017_pipeline_edit.sql`（连同此前未应用迁移）→ 同步升级 API 与独立 pipeline-worker。内置模式占用 pipeline.run.submit / pipeline.run.stop / pipeline.run.delete / pipeline.run.edit，外部 mTLS 执行器不能再领取这四类动作；Trainer/KServe 继续使用原机器执行桥。无需为内置 KFP worker 开启 executor.enabled。
+上线顺序：停止旧 Pipeline 写入者并核对未完运行 → 确认部署的 KFP 支持客户端 `run_id` 与同 ID 幂等恢复 → 按顺序显式执行相关迁移 → 同步升级 API 与独立 pipeline-worker。内置模式占用 Pipeline 动作，外部 mTLS 执行器不能再领取；KServe 启用内置 worker 后同理，Trainer 继续使用机器执行桥。无需为内置 worker 开启 executor.enabled。
 
 独立观测还需先显式应用 `000016_pipeline_sync.sql`，新增调度索引、观测租约及同步新鲜度字段；未执行迁移，不自动建表或回填未知外部归属。
 
@@ -226,4 +226,4 @@ Pipeline 在线终端已另外接入 Kubernetes `pods/exec`，复用节点归属
 
 Experiment 管理、向官方 Pipeline/version 目录上传同步、RecurringRun 定时调度、artifact 根输入、平台扩展、多文档包、凭据引用解析、产物下载/MLMD 浏览、官方缓存管理接口、无损暂停恢复、失败节点原地 Retry、前端和集群安装不在此次主线范围。在线节点日志已独立接入 Kubernetes pods/log，需显式应用 000018_pipeline_logs.sql，详见 [公共日志组件](pod-logs.md)。[离线日志](log-archives.md) 已补 MinIO 按需读取接口，复用该权限，不增加日志索引表；采集端需先上传约定格式，编辑/删除不等待归档完成。可提交新业务运行，也可编辑清理后手动重建；不能借操作重试复用终态 KFP ID。
 
-核心源码：`internal/infra/kfp/client.go`、`internal/service/pipeline_package.go`、`internal/service/pipeline_execution.go`、`internal/service/pipeline_sync.go`、`internal/worker/pipeline.go`、`internal/config/pipeline.go` 和 `internal/migration/000015_pipeline_kfp.sql`、`000016_pipeline_sync.sql`。本轮未改动官方 KFP 引擎、Notebook 生命周期、Trainer/KServe 实际执行逻辑。
+核心源码：`internal/infra/kfp/client.go`、`internal/service/pipeline_package.go`、`internal/service/pipeline_execution.go`、`internal/service/pipeline_sync.go`、`internal/worker/pipeline.go`、`internal/config/pipeline.go` 和相关迁移。本轮未改动官方 KFP 引擎、Notebook 生命周期或 Trainer 执行逻辑。

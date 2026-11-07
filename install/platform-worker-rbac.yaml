@@ -38,6 +38,11 @@ rules:
   - apiGroups: [security.istio.io]
     resources: [authorizationpolicies]
     verbs: [get, list, create, update, delete]
+  # kserve-worker 管理 Loom 业务服务对应的 InferenceService；
+  # 归属、instance 和 UID 仍由应用层逐对象校验。
+  - apiGroups: [serving.kserve.io]
+    resources: [inferenceservices]
+    verbs: [get, list, watch, create, update, delete]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

@@ -18,12 +18,18 @@ import (
 func newBusinessService(base *service.Service, client *k8s.Client) *service.Service {
 	base.SetQuotaReader(boundQuotaReader{client: client, owner: base.InfrastructureOwner})
 	base.PipelineVerifier = boundPipelineVerifier{client: client, owner: base.InfrastructureOwner}
+	base.KServeVerifier = boundKServeVerifier{client: client, owner: base.InfrastructureOwner}
 	if client != nil {
 		base.SetNotebookReader(client)
 		base.PipelineLogs = client
 		base.PipelineTerminal = client
+		base.KServeClient = client
 	}
 	return base
+}
+
+func configureKServe(base *service.Service, cfg config.KServe) {
+	base.KServeConfig = cfg
 }
 
 func configurePipeline(base *service.Service, cfg config.Pipeline) {
@@ -51,6 +57,26 @@ func configureLogArchive(base *service.Service, cfg config.LogArchive) error {
 type boundPipelineVerifier struct {
 	client *k8s.Client
 	owner  string
+}
+
+type boundKServeVerifier struct {
+	client *k8s.Client
+	owner  string
+}
+
+func (v boundKServeVerifier) VerifyKServeSpace(ctx context.Context, claim *service.MLExecutionClaim) error {
+	if v.client == nil || claim.Space == nil {
+		return apperr.New(apperr.CodeUnavailable, "集群或推理服务空间身份尚未就绪")
+	}
+	exists, err := v.client.AccessNamespace(ctx, k8s.SpaceRef{ID: claim.Command.GroupID, InstanceID: claim.Space.InstanceID,
+		Name: claim.Command.Namespace, Owner: v.owner, ProfileUID: claim.Space.ProfileUID, NamespaceUID: claim.Space.NamespaceUID})
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return apperr.New(apperr.CodeConflict, "推理服务空间已消失，禁止写入 KServe")
+	}
+	return nil
 }
 
 func (v boundPipelineVerifier) VerifyPipelineSpace(ctx context.Context, claim *service.MLExecutionClaim) error {

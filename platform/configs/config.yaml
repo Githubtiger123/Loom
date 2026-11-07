@@ -113,8 +113,18 @@ pipeline:
   # 每个 pipeline-worker 进程的观测请求上限，不包括提交/停止/删除动作自身的 API 调用。
   sync_qps: 10
 
+# 内置 KServe 执行器；启用后由独立 kserve-worker 管理 InferenceService CR。
+kserve:
+  enabled: false
+  service_account: default-editor
+  deployment_mode: Standard
+  poll_interval: 10s
+  resync_interval: 5m
+  sync_concurrency: 2
+  sync_qps: 10
+
 # 可选机器执行入口，与公网业务监听隔离；只接受 CA 验证并匹配固定证书指纹的客户端。
-# Trainer/KServe 仍需外部适配器；内置 KFP 启用后不接受外部领取 Pipeline 任务。
+# Trainer 仍需外部适配器；启用内置 KFP/KServe 后不接受外部领取对应任务。
 executor:
   enabled: false
   addr: ":8444"

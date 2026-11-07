@@ -270,6 +270,9 @@ func (s *Service) ClaimMLExecution(ctx context.Context, peer string, in dto.Clai
 		if s.PipelineClient != nil && (action == string(MLPipelineSubmit) || action == string(MLPipelineStop) || action == string(MLPipelineDelete) || action == string(MLPipelineEdit)) && peer != s.PipelinePeer() {
 			return nil, apperr.New(apperr.CodeConflict, "Pipeline 已由内置 KFP worker 管理，不允许外部执行器同时领取")
 		}
+		if s.KServeConfig.Enabled && (action == string(MLKServeCreate) || action == string(MLKServeUpdate) || action == string(MLKServeDeploy) || action == string(MLKServeStop) || action == string(MLKServeDelete)) && peer != s.KServePeer() {
+			return nil, apperr.New(apperr.CodeConflict, "KServe 已由内置 worker 管理，不允许外部执行器同时领取")
+		}
 		if !mlExecutionAction(action) || seen[action] {
 			return nil, mlExecutionInvalid()
 		}
@@ -500,13 +503,6 @@ func mlObservation(c *MLCommand, n *mlObject, e *mlExecution, in dto.ReportMLExe
 	default:
 		return "", "", mlExecutionInvalid()
 	}
-	// KServe stop is reversible only while retaining the native resource UID.
-	// A completed delete/recreate is a different business instance, not a deploy
-	// revision that may silently replace an immutable external identity. Reject
-	// absence-based stop before changing the domain or the execution receipt.
-	if c.KServe != nil && state == "STOPPED" && in.ResourceAbsent {
-		return "", "", apperr.New(apperr.CodeInvalid, "KServe 停用必须保留并确认原生 UID；资源不存在时需删除旧服务后新建")
-	}
 	if (in.ResourceAbsent && state != "DELETED" && state != "STOPPED") ||
 		(in.ResourceAbsent && state == "STOPPED" && c.DesiredState != "STOPPED") ||
 		(state == "DELETED" && (c.DesiredState != "DELETED" || !in.ResourceAbsent)) ||
@@ -646,6 +642,12 @@ func (s *Service) ReportMLExecution(ctx context.Context, peer, id string, in dto
 				domain["deleted_at"], domain["applied_revision"] = gorm.Expr("UTC_TIMESTAMP(3)"), c.Revision
 				n.state.AppliedRevision = c.Revision
 			}
+			if c.KServe != nil && in.ObservedState == "STOPPED" && in.ResourceAbsent {
+				// KServe 停止即删除 CR；配置与旧 UID 保留在修订和执行回执中。
+				domain["external_id"], domain["sync_enabled"] = nil, false
+				domain["kserve_ready"], domain["kserve_url"], domain["kserve_address"] = false, nil, nil
+				n.state.ExternalID = nil
+			}
 		} else if in.Outcome == "RETRY" {
 			opStatus, step = "RETRYING", "WAIT_EXECUTOR"
 		} else {
@@ -771,6 +773,9 @@ func (s *Service) MLExecutionOperation(ctx context.Context, peer, id string) (*M
 // is advanced, and no terminal operation is reopened. Any allowed mTLS adapter
 // may observe, including a replacement after a certificate rotation.
 func (s *Service) ObserveMLExecution(ctx context.Context, peer, id string, in dto.ObserveMLExecutionReq) (*MLExecutionView, error) {
+	if s.KServeConfig.Enabled && peer != s.KServePeer() {
+		return nil, apperr.New(apperr.CodeConflict, "KServe 已由内置 worker 观测，不接受外部观察者同时写入")
+	}
 	instance, err := uuid.Parse(in.InstanceID)
 	if !validator.IsSHA256(peer) || err != nil || instance.String() != in.InstanceID || in.Revision == 0 ||
 		!validator.IsSHA256(in.TargetFence) || !validator.IsCatalogID(in.ExternalID) || in.Sequence == 0 ||

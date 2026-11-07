@@ -6,7 +6,8 @@ user references. A separate built-in `pipeline-worker` now calls official KFP
 v2 APIs using the same durable claim/renew/report service contract in-process.
 See [KFP integration](../../docs/pipeline-kfp.md). With `pipeline.enabled=true`,
 Pipeline submit/stop/delete/edit claims are reserved for that worker; external certificate
-peers must omit those actions. Trainer/KServe still require external adapters.
+peers must omit those actions. When built-in KServe is enabled, KServe actions
+are likewise reserved for kserve-worker; Trainer still requires an external adapter.
 Do not mix old external Pipeline writers with the built-in adapter during rollout.
 
 The same pipeline-worker also runs an independent read-only observer with
@@ -128,9 +129,10 @@ observation order, not arrival order, and discard stale watch events locally.
 After takeover start above the returned sequence and reconcile external state;
 never replay a stale observation with a freshly allocated higher sequence.
 External IDs are opaque 1-64 character ASCII catalog identifiers (letters,
-digits, dot, dash, underscore), not URLs. Once bound they cannot change or be
-cleared, even merely because a new revision was requested. Always echo the known
-external ID, including error/deletion reports.
+digits, dot, dash, underscore), not URLs. Once bound they cannot change within
+that native resource lifetime. The only clearing rule is a verified KServe
+`STOPPED + resourceAbsent:true`; a later explicit deploy revision may bind the
+new CR UID. Always echo the known external ID in error/deletion reports.
 
 `OBSERVED` carries actual lifecycle evidence: UNKNOWN, SUBMITTED, PENDING,
 RUNNING (jobs only), SERVING (KServe only), SUCCEEDED (jobs only), FAILED,
@@ -145,46 +147,19 @@ proof that the command was applied.
 
 DELETED requires the delete intent and `resourceAbsent: true`, after an actual
 external lookup confirms the targeted resource no longer exists. A delete API
-returning 202/acknowledged is insufficient. Pipeline/Trainer STOPPED may use
-`resourceAbsent: true` for an explicit stop intent. **KServe STOPPED must not use
-absence**: see the retained-UID contract below. Other observations cannot assert
-absence. Existing terminal job states stay terminal while deletion is pending.
-New revisions may redeploy KServe with its existing native UID; they cannot
-replace that UID or restart a finished job under the old instance.
+returning 202/acknowledged is insufficient. STOPPED may use `resourceAbsent: true`
+for an explicit stop intent. Other observations cannot assert absence. Existing
+terminal job states stay terminal while deletion is pending.
 
-### KServe stop/deploy contract: retain the native UID
+### KServe stop/deploy contract: delete and rebind
 
-This implementation deliberately supports only a reversible, retained-native-UID
-KServe stop. The adapter must stop serving while preserving the InferenceService
-and its UID, then report STOPPED with `resourceAbsent: false` and the verified
-nonempty original externalId. It must verify actual non-serving state, not merely
-the acceptance of a scale/suspend request. If the deployed runtime cannot safely
-stop serving without deleting the InferenceService, that stop mechanism is not
-supported by this contract; report a canonical EXTERNAL_REJECTED failure instead
-of claiming STOPPED. No particular unsupported native pause field is assumed.
-
-`STOPPED + resourceAbsent: true` for KServe is rejected with INVALID_ARGUMENT
-(HTTP 400), including when no external ID was ever bound or the current action is
-an update of a stopped service. No receipt, observed state, applied revision, or
-lease renewal is committed for that rejected report. A new KServe deploy revision
-must retain and match the original UID. There is no automatic clear/rebind based
-on STOPPED, a revision bump, RESOURCE_NOT_FOUND, or a changed external object UID.
-
-If the native resource is absent (including a canceled create that never made an
-InferenceService), do not fake a retained-UID stop. Use a canonical
-RESOURCE_NOT_FOUND failure and explicitly delete the old business service using
-the delete intent with verified `DELETED + resourceAbsent: true`; then create a
-new business service/instance, whose first UID may be bound once. Echo any known
-old UID in the deletion report. This also applies to historical absence-based
-KServe stop receipts created before this restriction: exact receipt replays remain
-readable, but do not grant a new-UID deploy. History and old receipts remain fixed.
-
-Integration/Dirac handoff: `saveMLIntent` and `DeployKServe` must continue retaining
-ExternalID; no modification or reset is required for this retained-UID option.
-Do not clear it merely on a new revision. Supporting absence-based stop/redeploy
-later would require explicit persisted absence evidence and an authorized,
-transactional new-revision rebind contract; that functionality is not claimed
-here. No new MLCommand field, route, or migration is introduced for this fix.
+KServe STOPPED means that the targeted InferenceService was deleted and a GET
+confirmed absence. Report `STOPPED + resourceAbsent: true`, echoing the old UID
+when one was previously bound. The transaction clears only the current domain
+binding and disables runtime sync; immutable revision/history/execution receipts
+retain the old UID. A later explicit deploy revision may create a new CR and bind
+its new UID once. RESOURCE_NOT_FOUND during a SERVING intent never grants that
+rebind and must not trigger automatic recreation.
 
 `RETRY` and `FAILED` require empty `observedState`, false `resourceAbsent`, and a
 nonempty canonical reason. They preserve actual observed resource state. RETRY
@@ -241,6 +216,10 @@ I/O and fence/drain stale external side effects as described below.
 
 ## Ongoing KServe observation after deploy completion
 
+This endpoint remains the fallback contract when built-in KServe is disabled.
+When `kserve.enabled=true`, external observations are rejected and kserve-worker
+writes the same domain projection from its Kubernetes Watch plus periodic GET.
+
 The integration owner adds the private `POST .../{oid}/observe` route above.
 It uses the same mTLS authenticator, **not** user auth and not a lease owner.
 Body (`sequence` belongs to a separate stream, not execution report.sequence):
@@ -285,11 +264,10 @@ Use fresh evidence and serialize sequence allocation across watcher replicas;
 query observation.sequence after restart and discard old watch events. Any pinned
 trusted adapter may observe, so certificate rotation does not require a new deploy.
 
-Adapters must schedule the ongoing polls/watches; this API is a bridge, not a
-background KServe client. Consumers must interpret domain observedAt freshness
-before treating a stored SERVING value as current readiness; no new user access
-endpoint or freshness projection was added in this bridge-owned change. Without
-incoming observations timestamps intentionally age rather than being fabricated.
+In external mode the adapter must schedule polls/watches. In built-in mode the
+kserve-worker owns that schedule. Consumers must still interpret observation
+freshness before treating stored SERVING as current readiness; timestamps are
+never refreshed without an actual CR read or Watch event.
 
 Upgrade behavior: pre-000013 leases with no stored space identity cannot renew or
 report; reclaims bind identity only after their old lease expires. Already

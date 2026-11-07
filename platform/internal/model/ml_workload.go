@@ -109,7 +109,21 @@ func (TrainerJob) TableName() string { return "tb_trainer_job" }
 type KServeService struct {
 	MLIdentity
 	MLExecutionState
-	ConfigRevisionID uint64 `json:"configRevisionId"`
+	ConfigRevisionID         uint64     `json:"configRevisionId"`
+	KServeGeneration         int64      `json:"kserveGeneration" gorm:"column:kserve_generation"`
+	KServeObservedGeneration int64      `json:"kserveObservedGeneration" gorm:"column:kserve_observed_generation"`
+	KServeResourceVersion    *string    `json:"kserveResourceVersion" gorm:"column:kserve_resource_version"`
+	KServeReady              bool       `json:"kserveReady" gorm:"column:kserve_ready"`
+	KServeURL                *string    `json:"kserveUrl" gorm:"column:kserve_url"`
+	KServeAddress            *string    `json:"kserveAddress" gorm:"column:kserve_address"`
+	KServeReason             *string    `json:"kserveReason" gorm:"column:kserve_reason"`
+	KServeSyncedAt           *time.Time `json:"kserveSyncedAt" gorm:"column:kserve_synced_at"`
+	KServeSyncAttemptedAt    *time.Time `json:"kserveSyncAttemptedAt" gorm:"column:kserve_sync_attempted_at"`
+	SyncEnabled              bool       `json:"-" gorm:"default:false"`
+	SyncNextAt               time.Time  `json:"-" gorm:"default:CURRENT_TIMESTAMP(3)"`
+	SyncLeaseOwner           *string    `json:"-"`
+	SyncLeaseUntil           *time.Time `json:"-"`
+	SyncFailures             uint32     `json:"-" gorm:"default:0"`
 }
 
 func (KServeService) TableName() string { return "tb_kserve_service" }

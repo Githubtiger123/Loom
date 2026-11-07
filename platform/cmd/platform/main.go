@@ -34,7 +34,7 @@ import (
 )
 
 func main() {
-	role := flag.String("cmd", "api", "运行角色: api | worker | pipeline-worker | sync | cron | migrate | bootstrap | set-password")
+	role := flag.String("cmd", "api", "运行角色: api | worker | pipeline-worker | kserve-worker | sync | cron | migrate | bootstrap | set-password")
 	passwordUserID := flag.Uint64("user-id", 0, "set-password 的既有本地用户 ID；密码从终端隐藏输入或标准输入读取")
 	workerConcurrency := flag.Int("worker-concurrency", 4, "worker 并发数，范围 1–16")
 	cfgPath := flag.String("config", "configs/config.yaml", "配置文件路径")
@@ -44,9 +44,9 @@ func main() {
 	flag.Parse()
 
 	switch *role {
-	case "api", "worker", "pipeline-worker", "sync", "cron", "migrate", "bootstrap", "set-password":
+	case "api", "worker", "pipeline-worker", "kserve-worker", "sync", "cron", "migrate", "bootstrap", "set-password":
 	default:
-		fmt.Fprintf(os.Stderr, "unknown cmd: %s（可选 api / worker / pipeline-worker / sync / cron / migrate / bootstrap / set-password）\n", *role)
+		fmt.Fprintf(os.Stderr, "unknown cmd: %s（可选 api / worker / pipeline-worker / kserve-worker / sync / cron / migrate / bootstrap / set-password）\n", *role)
 		os.Exit(1)
 	}
 
@@ -162,12 +162,15 @@ func main() {
 		runner.NotebookImageCatalog = notebookImages
 		runner.Service.NotebookImages = notebookImages
 		configurePipeline(runner.Service, cfg.Pipeline)
+		configureKServe(runner.Service, cfg.KServe)
 		var runErr error
 		switch *role {
 		case "worker":
 			runErr = runner.Run(ctx)
 		case "pipeline-worker":
 			runErr = runner.RunPipeline(ctx)
+		case "kserve-worker":
+			runErr = runner.RunKServe(ctx)
 		case "sync":
 			runErr = runner.RunObserver(ctx)
 		case "cron":
@@ -379,6 +382,7 @@ func runAPI(ctx context.Context, cfg *config.Config, logger *slog.Logger, d *dep
 	businessService := newBusinessService(service.New(d.db, cfg.K8s.Cluster, cfg.K8s.InfrastructureOwner), k8sClient)
 	businessService.NotebookImages = notebookImages
 	configurePipeline(businessService, cfg.Pipeline)
+	configureKServe(businessService, cfg.KServe)
 	if err := configureLogArchive(businessService, cfg.LogArchive); err != nil {
 		return err
 	}

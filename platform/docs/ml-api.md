@@ -1,6 +1,6 @@
 # Pipeline、Trainer、KServe 后端业务接口
 
-本文描述已写入的后端源码契约，未测试、编译、运行或执行迁移。Pipeline 已补入内置官方 KFP v2 接入主线，详见 [KFP 流程与边界](pipeline-kfp.md)；Trainer / KServe 实际适配器和前端仍未实现。业务接口和独立机器接口均在 `internal/route/route.go` 注册，但使用不同监听入口。
+本文描述已写入的后端源码契约，未测试、编译、运行或执行迁移。Pipeline 已补入内置官方 KFP v2 主线，KServe 已补入内置 CR 执行与状态同步，详见 [KFP 流程与边界](pipeline-kfp.md) 和 [KServe 主线](kserve.md)；Trainer 实际适配器和前端仍未实现。
 
 ## 共同约定
 
@@ -12,7 +12,7 @@
 - `202/PENDING` 只代表持久受理，必须看操作单及对象 `desiredState/observedState/revision/appliedRevision`。同步完成的元数据操作返回 `200`，不表示外部工作负载已运行。
 - 三模块分别使用 `pipeline.*`、`trainer.*`、`kserve.*` 权限；跨负责人访问还需相应 `read.any`。执行前仍会重查启动请求人的状态和权限。
 
-引用字段只接受受管标识，不接受 URL、任意 Secret 名、明文凭据或任意 Kubernetes PodSpec。Trainer/KServe 示例中的标识必须事先由可信适配器装配并解析；API 受理引用不代表引用已存在或获准使用。Pipeline 内置模式允许导入官方编译 IR，不执行用户 Python，也不由用户指定 KFP 端点、运行 SA 或存储根路径。
+Trainer 引用字段只接受受管标识，不接受 URL、任意 Secret 名、明文凭据或任意 Kubernetes PodSpec。KServe 只接受受限模型 storage URI 或容器镜像及少量结构化字段；存储凭据由固定 ServiceAccount 提供。Pipeline 内置模式允许导入官方编译 IR，不执行用户 Python，也不由用户指定 KFP 端点、运行 SA 或存储根路径。
 
 ## Pipeline
 
@@ -117,25 +117,25 @@
 | GET | `/kserve-services/{sid}/revisions` | 不可变配置修订 |
 | GET | `/kserve-services/{sid}/history` | 操作历史 |
 
-创建示例（digest 需替换成真实模型 SHA256）：
+MODEL 创建示例：
 
 ```json
 {
   "name":"classifier",
-  "runtimeRef":"serving-runtime-001",
-  "modelRef":"model-001",
-  "modelDigest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "deploymentType":"MODEL",
   "protocol":"v2",
   "minReplicas":1,
   "maxReplicas":2,
   "resources":{"cpu":"1","memory":"2Gi","gpu":0},
-  "credentials":[]
+  "model":{"storageUri":"s3://models/classifier/v1","modelFormat":"sklearn","modelFormatVersion":"1"}
 }
 ```
 
-PATCH 提交完整规格并加当前 `revision`，产生不可变修订；已停止服务修改后仍保持停止。部署使用 `{"revision":2,"revisionId":1}`，可选择保留的历史配置修订；停止和删除使用 `{"revision":2}`。
+CUSTOM 使用同一外层字段，将 `deploymentType` 设为 `CUSTOM`，并提供 `custom`：`{"image":"registry.example.com/team/server:v1","command":["/app/server"],"args":["--port=8080"],"port":8080,"healthPath":"/ready"}`。两类配置严格互斥；不接受任意 YAML、ServiceAccount、Secret、Volume 或 securityContext。
 
-当前 stop 合同要求适配器确认不再服务且保留原生 UID。仅支持“删除 CR 即停止”的环境不能伪报 STOPPED，应删除旧业务服务再新建。部署完成后的健康通过独立机器 observe 回报，不重开部署操作；历史 SERVING 不等于实时健康。
+PATCH 提交完整规格并加当前 `revision`，只产生不可变修订，不修改正在运行的 CR。部署使用 `{"revision":2,"revisionId":1}`，显式选择要发布的历史配置修订；停止和删除使用当前 revision。发布受理不等于 Ready，需继续读取业务状态。
+
+启用 `kserve.enabled` 后，独立 kserve-worker 使用固定 ServiceAccount 和 Standard 部署模式创建/更新 CR。停止会删除 `InferenceService`，确认 GET 404 后清空当前 UID 绑定，但保留业务配置和历史；再次部署创建新 CR 并绑定新 UID。删除业务服务同样先确认 CR 不存在，再软删除业务记录。Watch 实时同步 Ready、generation、URL 和错误，周期 GET 负责断线修复；历史 SERVING 不等于当前仍健康。详见 [KServe 主线](kserve.md)。
 
 ## 操作、空间与执行适配器
 
@@ -145,4 +145,4 @@ PATCH 提交完整规格并加当前 `revision`，产生不可变修订；已停
 
 独立 mTLS 机器入口提供 claim / renew / report / observe / receipt；不使用用户 JWT、Cookie 或转发证书头，不挂公网业务 mux。租约绑定证书、实例、revision 和空间 UID；回报使用单调序号，外部 ID 一旦确认不能替换。副作用发生前须重新检查授权及租约，处理重领与迟到结果，不能假设跨系统 exactly-once。
 
-完整执行桥协议见 [执行器契约](../internal/executor/README.md)。启用内置 KFP 后，Pipeline 动作由 pipeline-worker 专用领取，不与外部机器执行器混用。Trainer/KServe 或未配置内置执行的 Pipeline 没有部署适配器时继续等待，平台不会伪造结果。新增表、权限升级和配置见 [后端补全说明](backend-completion.md)，迁移需要部署方显式执行，本轮未执行。
+完整执行桥协议见 [执行器契约](../internal/executor/README.md)。启用内置 KFP/KServe 后，对应动作分别由专用 worker 领取，不与外部机器执行器混用。Trainer 或未配置内置执行的模块继续等待外部适配器，平台不会伪造结果。迁移需要部署方显式执行，本轮未执行。

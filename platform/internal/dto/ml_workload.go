@@ -101,14 +101,28 @@ type CreateTrainerJobReq struct {
 }
 
 type KServeSpec struct {
-	RuntimeRef  string            `json:"runtimeRef"`
-	ModelRef    string            `json:"modelRef"`
-	ModelDigest string            `json:"modelDigest"`
-	Protocol    string            `json:"protocol"` // v1 / v2
-	MinReplicas int               `json:"minReplicas"`
-	MaxReplicas int               `json:"maxReplicas"`
-	Resources   MLResources       `json:"resources"`
-	Credentials []MLCredentialRef `json:"credentials"`
+	DeploymentType string            `json:"deploymentType"` // MODEL / CUSTOM
+	Protocol       string            `json:"protocol"`       // v1 / v2
+	MinReplicas    int               `json:"minReplicas"`
+	MaxReplicas    int               `json:"maxReplicas"`
+	Resources      MLResources       `json:"resources"`
+	Model          *KServeModelSpec  `json:"model,omitempty"`
+	Custom         *KServeCustomSpec `json:"custom,omitempty"`
+}
+
+type KServeModelSpec struct {
+	StorageURI         string `json:"storageUri"`
+	ModelFormat        string `json:"modelFormat"`
+	ModelFormatVersion string `json:"modelFormatVersion,omitempty"`
+	Runtime            string `json:"runtime,omitempty"`
+}
+
+type KServeCustomSpec struct {
+	Image      string   `json:"image"`
+	Command    []string `json:"command,omitempty"`
+	Args       []string `json:"args,omitempty"`
+	Port       int32    `json:"port"`
+	HealthPath string   `json:"healthPath"`
 }
 
 type CreateKServeReq struct {
@@ -116,8 +130,7 @@ type CreateKServeReq struct {
 	KServeSpec
 }
 
-// Update creates an immutable config revision and reconciles the current desired
-// state. A stopped service stays stopped. Deploy can select any retained revision.
+// Update 只保存不可变配置修订，不发布；Deploy 可选择任一保留修订。
 type UpdateKServeReq struct {
 	Revision uint64 `json:"revision"`
 	KServeSpec
@@ -288,15 +301,29 @@ func (r CreateTrainerJobReq) Validate() error {
 }
 
 func (r KServeSpec) Validate() error {
-	if !validator.IsMLReference(r.RuntimeRef) || !validator.IsMLReference(r.ModelRef) || !validator.IsSHA256(r.ModelDigest) || (r.Protocol != "v1" && r.Protocol != "v2") || r.MinReplicas < 0 || r.MaxReplicas < 1 || r.MinReplicas > r.MaxReplicas || r.MaxReplicas > 128 || len(r.Credentials) > 16 {
-		return mlInvalid("模型/Runtime/摘要/协议无效，副本须为 0–128 且 max≥1，凭据引用最多 16 项")
+	if (r.Protocol != "v1" && r.Protocol != "v2") || r.MinReplicas < 1 || r.MaxReplicas < r.MinReplicas || r.MaxReplicas > 128 {
+		return mlInvalid("协议须为 v1/v2，副本须为 1–128 且 max≥min")
 	}
-	seen := map[string]bool{}
-	for _, c := range r.Credentials {
-		if !validator.IsMLReference(c.Ref) || seen[c.Ref] {
-			return mlInvalid("凭据引用无效或重复")
+	if (r.Model == nil) == (r.Custom == nil) {
+		return mlInvalid("MODEL 与 CUSTOM 配置必须且只能提供一种")
+	}
+	switch r.DeploymentType {
+	case "MODEL":
+		if r.Model == nil || !validator.IsKServeStorageURI(r.Model.StorageURI) ||
+			!validator.IsKServeModelFormat(r.Model.ModelFormat) ||
+			!validator.IsKServeModelVersion(r.Model.ModelFormatVersion) ||
+			(r.Model.Runtime != "" && !validator.IsDNS1123Subdomain(r.Model.Runtime)) {
+			return mlInvalid("MODEL 的存储地址、模型格式、格式版本或受控 Runtime 名称无效")
 		}
-		seen[c.Ref] = true
+	case "CUSTOM":
+		if r.Custom == nil || !validator.IsNotebookImageReference(r.Custom.Image) ||
+			r.Custom.Port < 1 || r.Custom.Port > 65535 ||
+			!validator.IsKServeHealthPath(r.Custom.HealthPath) ||
+			!validator.IsKServeCommand(r.Custom.Command) || !validator.IsKServeCommand(r.Custom.Args) {
+			return mlInvalid("CUSTOM 的镜像、命令、端口或健康检查路径无效")
+		}
+	default:
+		return mlInvalid("deploymentType 须为 MODEL 或 CUSTOM")
 	}
 	return r.Resources.Validate()
 }

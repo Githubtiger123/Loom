@@ -345,7 +345,7 @@ func (s *Service) CreateKServe(ctx context.Context, actor, groupID uint64, key s
 			if err != nil {
 				return err
 			}
-			n := &model.KServeService{MLIdentity: model.MLIdentity{GroupID: groupID, Name: in.Name, CreatedBy: &actor}, MLExecutionState: mlNewState(g, o.ID, "SERVING", b)}
+			n := &model.KServeService{MLIdentity: model.MLIdentity{GroupID: groupID, Name: in.Name, CreatedBy: &actor}, MLExecutionState: mlNewState(g, o.ID, "SERVING", b), SyncEnabled: true}
 			if err := st.DB.WithContext(ctx).Create(n).Error; err != nil {
 				return err
 			}
@@ -393,6 +393,9 @@ func saveMLIntent(ctx context.Context, st *repository.Store, o *model.Operation,
 	if o.TargetType == "pipeline_run" {
 		fields["sync_next_at"] = gorm.Expr("UTC_TIMESTAMP(3)")
 	}
+	if o.TargetType == "kserve_service" {
+		fields["sync_enabled"], fields["sync_next_at"] = n.state.DesiredState == "SERVING", gorm.Expr("UTC_TIMESTAMP(3)")
+	}
 	if n.configID != nil {
 		fields["config_revision_id"] = *n.configID
 	}
@@ -406,9 +409,10 @@ func (s *Service) UpdateKServe(ctx context.Context, actor, groupID, id uint64, k
 	if err := in.Validate(); err != nil {
 		return nil, err
 	}
-	return s.mutate(ctx, actor, groupID, key, "kserve.update", string(MLKServeUpdate), "kserve_service", fmt.Sprintf("%d/%d", groupID, id), in,
+	return s.mutate(ctx, actor, groupID, key, "kserve.update", "kserve.config.update", "kserve_service", fmt.Sprintf("%d/%d", groupID, id), in,
 		func(st *repository.Store, o *model.Operation) error {
-			if _, err := mlGroup(ctx, st, groupID, false); err != nil {
+			g, err := mlGroup(ctx, st, groupID, false)
+			if err != nil {
 				return err
 			}
 			n, err := writableML(ctx, st, groupID, id, in.Revision, "kserve_service", false)
@@ -419,12 +423,22 @@ func (s *Service) UpdateKServe(ctx context.Context, actor, groupID, id uint64, k
 			if err != nil {
 				return err
 			}
-			v := &model.KServeRevision{GroupID: groupID, ServiceID: id, Revision: n.state.Revision + 1, Spec: b, SpecHash: mlHash(b), CreatedBy: &actor}
+			nextRevision := n.state.Revision + 1
+			v := &model.KServeRevision{GroupID: groupID, ServiceID: id, Revision: nextRevision, Spec: b, SpecHash: mlHash(b), CreatedBy: &actor}
 			if err := st.DB.WithContext(ctx).Create(v).Error; err != nil {
 				return err
 			}
-			*n.configID, n.state.RequestedSpec = v.ID, b
-			return saveMLIntent(ctx, st, o, n)
+			if err := st.UpdateML(ctx, n.row, groupID, id, n.state.Revision, map[string]any{"revision": nextRevision}); err != nil {
+				return err
+			}
+			o.Cluster, o.TargetKey, o.TargetVersion = g.Cluster, strconv.FormatUint(id, 10), nextRevision
+			if err := st.DB.WithContext(ctx).Create(&model.MLWorkloadHistory{GroupID: groupID, TargetType: "kserve_service",
+				TargetID: id, Revision: nextRevision, OperationID: o.ID, Event: "CONFIG_REVISION_SAVED", Action: o.Action,
+				ActorID: actor, DesiredState: n.state.DesiredState, ObservedState: n.state.ObservedState, Status: n.state.Status, Spec: b}).Error; err != nil {
+				return err
+			}
+			return result(o, map[string]any{"resourceId": id, "groupId": groupID, "revision": nextRevision,
+				"configRevision": v, "published": false, "activeConfigRevisionId": *n.configID})
 		}, mlGuard(ctx, actor, groupID, id, "kserve_service", "kserve.update"))
 }
 
