@@ -1,0 +1,117 @@
+# Loom 平台服务配置（默认值，进仓库）
+#
+# 覆盖顺序：本文件 < configs/config.local.yaml < 环境变量 < 命令行 flag
+# 指定其他配置路径时，local 文件从该配置所在目录读取；--config="" 时不读取文件。
+# 密码类信息不要写在这里，用环境变量注入：
+#   LOOM_DB_DSN / LOOM_REDIS_PASSWORD / LOOM_MQ_URL / LOOM_ISTIO_INGRESS_PRINCIPAL
+
+server:
+  addr: ":8080"
+  read_timeout: 15s
+  write_timeout: 60s
+  shutdown_timeout: 10s
+
+# MySQL：必需。连不上就不启动——没有库就没有"谁有什么权限"的答案。
+db:
+  # 由 LOOM_DB_DSN 覆盖，示例：
+  # user:pass@tcp(127.0.0.1:3306)/loom?parseTime=true&charset=utf8mb4&loc=Asia%2FShanghai
+  dsn: ""
+  max_open: 50
+  max_idle: 10
+  # 必须小于中间件/LB 的空闲超时，否则会拿到已被对端关闭的连接
+  conn_max_lifetime: 30m
+  conn_max_idle_time: 10m
+  ping_timeout: 3s
+
+# Redis：可选缓存，故障时认证与权限直查 MySQL，不影响已有 Token 的持久记录。
+redis:
+  enabled: true
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+  dial_timeout: 2s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_size: 20
+
+# RabbitMQ：一期关闭。sync/cron 都在进程内跑，没有必须走队列的场景；
+# 打开后连接失败会直接拒绝启动，避免静默丢消息。
+mq:
+  enabled: false
+  url: "amqp://guest:guest@127.0.0.1:5672/"
+  exchange: "loom"
+  prefetch: 10
+
+k8s:
+  cluster: default
+  # 固定的 Profile 原生 owner，必须对应真实登录身份，不是业务负责人。
+  infrastructure_owner: admin
+  # 为空表示使用 Pod 内的 ServiceAccount（生产默认）
+  # 本地开发填 kubeconfig 路径，或用 LOOM_K8S_KUBECONFIG 注入
+  kubeconfig: ""
+  # profile-controller 创建的 ResourceQuota 名，不要改
+  quota_name: kf-resource-quota
+  # Notebook Pod 使用的 SA，与 notebooks-v1 模板一致
+  editor_service_account: default-editor
+
+istio:
+  # 这两项必须与本集群实际一致。写错不会报错，
+  # 只会让所有成员的 AuthorizationPolicy 静默失效（表现为全部 403）
+  ingress_principal: "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
+  kfp_ui_principal: "cluster.local/ns/kubeflow/sa/ml-pipeline-ui"
+
+identity:
+  # 必须设置为真实身份提供方 issuer；为空时业务接口拒绝认证，不自动开户。
+  issuer: ""
+  subject_header: oidc-sub
+  # 仅接受这些直接连接方注入的身份。生产改为可信网关的最小网段，并用 NetworkPolicy 隔离。
+  # 网关必须先删除客户端同名头，再写入已验证的 userid/sub；不要信任 X-Forwarded-For。
+  trusted_proxy_cidrs: ["127.0.0.1/32", "::1/128"]
+  # 必须与 profile-controller 的 USERID_HEADER 一致
+  userid_header: "kubeflow-userid"
+  # 必须与 profile-controller 的 USERID_PREFIX 一致；GCP 场景是 accounts.google.com:
+  userid_prefix: ""
+
+# 本地认证显式开启，不与外部身份头同时放行。这里只给默认值，不含任何密钥。
+# 启用前设置真实的 issuer/public_origin，并从 Secret 注入 LOOM_AUTH_SIGNING_KEY。
+# 已有外部身份不会因 issuer 相同邮箱或用户名而自动迁移成本地用户。
+auth:
+  enabled: false
+  issuer: ""
+  audience: loom-api
+  public_origin: ""
+  # 可选：承载 Notebook 的独立 HTTPS 主机；由平台 Bearer 建立同一 Access JWT Cookie，不带 Refresh。
+  notebook_origin: ""
+  access_ttl: 15m
+  session_ttl: 360h
+
+images:
+  # 独立 Notebook 镜像目录；相对路径基于进程工作目录。
+  # 可用 LOOM_IMAGES_PATH 覆盖；API/worker 启动时加载，修改后重启。
+  path: "configs/images.yaml"
+
+# 官方 KFP 适配器：业务 API 与独立 pipeline-worker 需使用同一份配置。
+pipeline:
+  # 复用官方 KFP v2 后端，执行角色使用 -cmd pipeline-worker；不改 Notebook worker。
+  enabled: false
+  endpoint: "http://ml-pipeline.kubeflow.svc.cluster.local:8888"
+  # 由运维挂载面向 KFP 的 projected ServiceAccount token；不使用 Loom Access JWT。
+  token_file: "/var/run/secrets/kfp/token"
+  service_account: "default-editor"
+  # 替换为实际桶；平台自动追加 namespace/实例 UUID，用户不能覆盖根路径。
+  pipeline_root: "s3://REPLACE-ME/loom/pipelines"
+  timeout: 15s
+  poll_interval: 15s
+
+# 可选机器执行入口，与公网业务监听隔离；只接受 CA 验证并匹配固定证书指纹的客户端。
+# Trainer/KServe 仍需外部适配器；内置 KFP 启用后不接受外部领取 Pipeline 任务。
+executor:
+  enabled: false
+  addr: ":8444"
+  server_cert: ""
+  server_key: ""
+  client_ca: ""
+  client_cert_sha256: []
+
+log:
+  level: "info" # debug | info | warn | error

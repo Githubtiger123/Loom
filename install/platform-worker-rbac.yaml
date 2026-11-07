@@ -1,0 +1,53 @@
+# 此文件只定义执行器身份与所需权限，不部署程序、不配置认证入口。
+# 审阅后由部署方应用，worker/sync 工作负载使用此 ServiceAccount。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: loom-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-worker
+  namespace: loom-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loom-profile-access-worker
+rules:
+  - apiGroups: [kubeflow.org]
+    resources: [profiles]
+    verbs: [get, list, create]
+  - apiGroups: [""]
+    resources: [namespaces, serviceaccounts, resourcequotas]
+    verbs: [get]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles]
+    verbs: [get]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterrolebindings]
+    verbs: [list]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles]
+    resourceNames: [kubeflow-edit, kubeflow-view]
+    verbs: [bind]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [rolebindings]
+    verbs: [get, list, create, delete]
+  - apiGroups: [security.istio.io]
+    resources: [authorizationpolicies]
+    verbs: [get, list, create, update, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-profile-access-worker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-profile-access-worker
+subjects:
+  - kind: ServiceAccount
+    name: loom-worker
+    namespace: loom-system

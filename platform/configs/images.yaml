@@ -1,0 +1,55 @@
+# Notebook 官方镜像目录；主配置通过 images.path 引用此文件。
+# 来源：notebooks-v1/components/crud-web-apps/jupyter/manifests/base/configs/spawner_ui_config.yaml
+# category 是展示分类；serverType 是 Kubeflow 的 HTTP 访问适配类型。
+# enabled=false 仅禁止新建；已有实例继续使用数据库保存的镜像地址和类型。
+# ID 和 serverType 发布后不要复用/更换；新版本建议新增 ID。
+# 这里使用官方发行标签，并非不可变 digest；生产可替换为 @sha256:...。
+images:
+  - id: jupyter-scipy
+    category: jupyter
+    name: JupyterLab · SciPy
+    serverType: jupyter
+    image: ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-scipy:v1.11.1
+    enabled: true
+
+  - id: jupyter-pytorch
+    category: jupyter
+    name: JupyterLab · PyTorch
+    serverType: jupyter
+    image: ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-pytorch-full:v1.11.1
+    enabled: true
+
+  - id: jupyter-pytorch-cuda
+    category: jupyter
+    name: JupyterLab · PyTorch CUDA
+    serverType: jupyter
+    image: ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-pytorch-cuda-full:v1.11.1
+    enabled: true
+
+  - id: jupyter-tensorflow
+    category: jupyter
+    name: JupyterLab · TensorFlow
+    serverType: jupyter
+    image: ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-tensorflow-full:v1.11.1
+    enabled: true
+
+  - id: jupyter-tensorflow-cuda
+    category: jupyter
+    name: JupyterLab · TensorFlow CUDA
+    serverType: jupyter
+    image: ghcr.io/kubeflow/kubeflow/notebook-servers/jupyter-tensorflow-cuda-full:v1.11.1
+    enabled: true
+
+  - id: vscode-python
+    category: vscode
+    name: VS Code · Python
+    serverType: group-one
+    image: ghcr.io/kubeflow/kubeflow/notebook-servers/codeserver-python:v1.11.1
+    enabled: true
+
+  - id: rstudio-tidyverse
+    category: rstudio
+    name: RStudio · Tidyverse
+    serverType: group-two
+    image: ghcr.io/kubeflow/kubeflow/notebook-servers/rstudio-tidyverse:v1.11.1
+    enabled: true

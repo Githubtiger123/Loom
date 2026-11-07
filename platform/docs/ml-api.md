@@ -1,0 +1,133 @@
+# Pipeline、Trainer、KServe 后端业务接口
+
+本文描述已写入的后端源码契约，未测试、编译、运行或执行迁移。Pipeline 已补入内置官方 KFP v2 接入主线，详见 [KFP 流程与边界](pipeline-kfp.md)；Trainer / KServe 实际适配器和前端仍未实现。业务接口和独立机器接口均在 `internal/route/route.go` 注册，但使用不同监听入口。
+
+## 共同约定
+
+- 以下路径均以 `/api/v1/groups/{gid}` 开头，使用平台认证及当前空间权限。
+- 写请求需 `Idempotency-Key`。同操作者同键同请求返回原操作，同键不同请求冲突；重放也重新检查对象权限。
+- 修改、停止、删除和归档需当前 `revision`，不接受覆盖更新。创建接口的名称是 DNS-1123 label。
+- 查询返回 `{"data": ...}`；列表 data 为 `{"items": [], "nextAfter": ...}`。分页使用 `after`、`limit`，默认只查询本人资源；`scope=all/unowned` 额外要求对应模块的 `read.any`。
+- 默认不列出已删除或归档对象，可用 `includeDeleted=true`。详情、版本、历史及操作单仍执行当前授权，不因曾经创建过对象而绕过撤权。
+- `202/PENDING` 只代表持久受理，必须看操作单及对象 `desiredState/observedState/revision/appliedRevision`。同步完成的元数据操作返回 `200`，不表示外部工作负载已运行。
+- 三模块分别使用 `pipeline.*`、`trainer.*`、`kserve.*` 权限；跨负责人访问还需相应 `read.any`。执行前仍会重查启动请求人的状态和权限。
+
+引用字段只接受受管标识，不接受 URL、任意 Secret 名、明文凭据或任意 Kubernetes PodSpec。Trainer/KServe 示例中的标识必须事先由可信适配器装配并解析；API 受理引用不代表引用已存在或获准使用。Pipeline 内置模式允许导入官方编译 IR，不执行用户 Python，也不由用户指定 KFP 端点、运行 SA 或存储根路径。
+
+## Pipeline
+
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| GET / POST | `/pipelines` | 查询 / 创建定义 |
+| GET / DELETE | `/pipelines/{pid}` | 详情 / 归档定义 |
+| GET / POST | `/pipelines/{pid}/versions` | 查询 / 创建不可变版本 |
+| GET | `/pipelines/{pid}/versions/{vid}` | 版本详情 |
+| GET / POST | `/pipelines/{pid}/runs` | 查询该定义的运行 / 从指定版本提交新运行 |
+| GET | `/pipeline-runs` | 查询空间内运行 |
+| GET / DELETE | `/pipeline-runs/{rid}` | 详情 / 归档终态运行 |
+| GET | `/pipeline-runs/{rid}/runtime` | 官方实时运行及经筛选的节点状态 |
+| POST | `/pipeline-runs/{rid}/stop` | 请求停止 |
+| GET | `/pipeline-runs/{rid}/history` | 操作历史 |
+
+定义、不可变版本和运行分表保存；运行复制版本及参数快照，后续新版本不修改历史运行。
+
+创建定义示例：
+
+```json
+{"name":"daily-train","displayName":"每日训练","description":"业务训练流程"}
+```
+
+导入版本示例（`revision` 是定义当前版本；YAML 文本需替换成 SDK 编译的完整单文档 KFP v2 IR）：
+
+```json
+{
+  "revision": 1,
+  "name": "v1",
+  "packageYaml": "<SDK 编译的完整单文档 KFP v2 IR YAML>"
+}
+```
+
+提交运行示例：
+
+```json
+{"name":"daily-train-001","versionId":1,"parameters":[{"name":"epochs","value":"10"}]}
+```
+
+也可提交 `pipelineSpec` JSON 对象，与 packageYaml 二选一。后端从 IR 提取参数 schema、默认值及摘要，不再要求用户手填；支持 STRING / INTEGER / DOUBLE / BOOLEAN / LIST / STRUCT。公开值仍以字符串传输，提交 KFP 时按类型转换为原生 JSON 值。旧协议另有 NUMBER / CREDENTIAL，但内置主线没有凭据引用解析器，不能传明文凭据或仅传 packageRef。运行不能用操作重试重新启动已经结束的作业，须提交新运行。
+
+启用 pipeline 配置并独立运行 pipeline-worker 后，提交调用官方 CreateRun，停止调用 TerminateRun，GET 轮询同步状态。使用 namespace 的默认 Experiment 和内嵌 pipeline_spec，不向官方 Pipeline/version 目录重复上传。CreateRun 超时采用持久提交日志和身份核对恢复，不盲目二次提交。详细限制、配置与故障恢复见 [KFP 主线](pipeline-kfp.md)。
+
+停止和归档请求示例：
+
+```json
+{"revision":1}
+```
+
+`pipeline.stop` 负责停止，两个 DELETE 使用 `pipeline.delete`。运行归档只接受执行器确认的 SUCCEEDED / FAILED / STOPPED、已应用 revision 且没有未完成操作的对象。归档仅记录 `deletedAt` 并保留原运行证据，不伪造外部 DELETED 或删除外部 KFP 记录。先归档定义下所有运行，才能归档定义；版本和历史保留。已确认归档的终态运行不会因 STOPPED 观测过期再次算成活动任务。
+
+## Trainer
+
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| GET / POST | `/trainer-jobs` | 查询 / 创建训练作业 |
+| GET / DELETE | `/trainer-jobs/{jid}` | 详情 / 删除 |
+| POST | `/trainer-jobs/{jid}/stop` | 请求停止 |
+| GET | `/trainer-jobs/{jid}/history` | 操作历史 |
+
+创建示例：
+
+```json
+{
+  "name":"train-001",
+  "runtimeRef":"pytorch-runtime-001",
+  "codeRef":"code-snapshot-001",
+  "datasetRefs":["dataset-001"],
+  "outputRef":"output-001",
+  "workers":2,
+  "resources":{"cpu":"2","memory":"4Gi","gpu":0},
+  "parameters":[{"name":"epochs","value":"10"}]
+}
+```
+
+`resources` 是每个 worker 的请求。适配器负责在授权范围内解析 runtime/code/data/output，校验代码和资源策略，再提交真实作业。提交成功不等于训练成功。停止、删除传 `{"revision":1}`；删除必须等待真实目标不存在的执行回执，不以删除请求已发出作为完成。
+
+## KServe
+
+| 方法 | 路径 | 作用 |
+| --- | --- | --- |
+| GET / POST | `/kserve-services` | 查询 / 创建并请求部署 |
+| GET / PATCH / DELETE | `/kserve-services/{sid}` | 详情 / 新配置修订 / 删除 |
+| POST | `/kserve-services/{sid}/deploy` | 部署指定配置修订 |
+| POST | `/kserve-services/{sid}/stop` | 请求停止 |
+| GET | `/kserve-services/{sid}/revisions` | 不可变配置修订 |
+| GET | `/kserve-services/{sid}/history` | 操作历史 |
+
+创建示例（digest 需替换成真实模型 SHA256）：
+
+```json
+{
+  "name":"classifier",
+  "runtimeRef":"serving-runtime-001",
+  "modelRef":"model-001",
+  "modelDigest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "protocol":"v2",
+  "minReplicas":1,
+  "maxReplicas":2,
+  "resources":{"cpu":"1","memory":"2Gi","gpu":0},
+  "credentials":[]
+}
+```
+
+PATCH 提交完整规格并加当前 `revision`，产生不可变修订；已停止服务修改后仍保持停止。部署使用 `{"revision":2,"revisionId":1}`，可选择保留的历史配置修订；停止和删除使用 `{"revision":2}`。
+
+当前 stop 合同要求适配器确认不再服务且保留原生 UID。仅支持“删除 CR 即停止”的环境不能伪报 STOPPED，应删除旧业务服务再新建。部署完成后的健康通过独立机器 observe 回报，不重开部署操作；历史 SERVING 不等于实时健康。
+
+## 操作、空间与执行适配器
+
+查询 `GET /api/v1/operations/{oid}`，人工重试 `POST /api/v1/operations/{oid}/retry`，后者同样带幂等键。只重试当前实例和 revision 对应的失败执行，不允许旧操作覆盖新意图或重跑已结束的作业。
+
+创建、提交、修改和部署要求 ACTIVE 空间。已有资源停止、删除和归档可在 ACTIVE / DEGRADED / DISABLING / DISABLED 中处理，不能借清理接口恢复运行。空间停用、用户禁用和成员移除遇到活动或未确认终态的 ML 资源时会阻断，先显式停止并确认再重试，不自动取消用户训练。
+
+独立 mTLS 机器入口提供 claim / renew / report / observe / receipt；不使用用户 JWT、Cookie 或转发证书头，不挂公网业务 mux。租约绑定证书、实例、revision 和空间 UID；回报使用单调序号，外部 ID 一旦确认不能替换。副作用发生前须重新检查授权及租约，处理重领与迟到结果，不能假设跨系统 exactly-once。
+
+完整执行桥协议见 [执行器契约](../internal/executor/README.md)。启用内置 KFP 后，Pipeline 动作由 pipeline-worker 专用领取，不与外部机器执行器混用。Trainer/KServe 或未配置内置执行的 Pipeline 没有部署适配器时继续等待，平台不会伪造结果。新增表、权限升级和配置见 [后端补全说明](backend-completion.md)，迁移需要部署方显式执行，本轮未执行。

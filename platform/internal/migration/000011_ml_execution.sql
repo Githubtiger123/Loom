@@ -1,0 +1,20 @@
+CREATE TABLE tb_ml_execution (
+  operation_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+  target_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  instance_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  revision BIGINT UNSIGNED NOT NULL,
+  external_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  observation_sequence BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  lease_peer_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  last_report_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  last_report_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  last_report_owner VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  last_report_peer_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  last_observed_state VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  last_report_at DATETIME(3) DEFAULT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_ml_execution_revision (target_type,instance_id,revision),
+  CONSTRAINT ck_ml_execution_target CHECK (target_type IN ('pipeline_run','trainer_job','kserve_service')),
+  CONSTRAINT ck_ml_execution_revision CHECK (revision > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
