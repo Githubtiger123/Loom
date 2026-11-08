@@ -197,7 +197,7 @@ type Binding struct {
 	GrantedAt time.Time  `json:"-" gorm:"default:CURRENT_TIMESTAMP(3)"`
 	RevokedBy *uint64    `json:"-"`
 	RevokedAt *time.Time `json:"-"`
-	Version   uint64     `json:"-" gorm:"default:1"`
+	Version   uint64     `json:"version" gorm:"default:1"`
 
 	// 主键。
 	ID uint64 `json:"id"`

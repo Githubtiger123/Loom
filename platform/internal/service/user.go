@@ -80,8 +80,9 @@ func grantDefault(ctx context.Context, st *repository.Store, userID, actor uint6
 }
 
 type UserState struct {
-	Subject                   string `json:"subject"`
-	ExternalIdentityConfirmed bool   `json:"externalIdentityConfirmed"`
+	Subject                      string  `json:"subject"`
+	ExternalIdentityConfirmed    bool    `json:"externalIdentityConfirmed"`
+	ExpectedAuthorizationVersion *uint64 `json:"expectedAuthorizationVersion,omitempty"`
 }
 
 func (s *Service) UserStatus(ctx context.Context, actor, userID uint64, key, status string, in UserState, localIssuers ...string) (*model.Operation, error) {
@@ -92,6 +93,9 @@ func (s *Service) UserStatus(ctx context.Context, actor, userID uint64, key, sta
 		u, err := st.User(ctx, userID, true)
 		if err != nil {
 			return err
+		}
+		if in.ExpectedAuthorizationVersion != nil && u.AuthorizationVersion != *in.ExpectedAuthorizationVersion {
+			return apperr.New(apperr.CodeConflict, "用户状态或授权已变化，请重新读取后操作")
 		}
 		if u.Status == "DELETING" || u.Status == "DELETED" {
 			return apperr.New(apperr.CodeConflict, "已删除的身份不能直接启用")

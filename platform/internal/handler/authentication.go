@@ -357,6 +357,32 @@ func (a *API) RevokeSession(w http.ResponseWriter, r *http.Request) {
 	}})
 }
 
+// AdminSessions 是标准 Endpoint，必须经 Authenticate + Wrap 注册。
+func (a *API) AdminSessions(ctx context.Context, actor *model.User, r *http.Request) (any, error) {
+	if a.auth == nil {
+		return nil, apperr.New(apperr.CodeUnavailable, "本地认证未启用")
+	}
+	if err := a.checkBrowserOrigin(r, false); err != nil {
+		return nil, err
+	}
+	target, err := pathID(r, "uid")
+	if err != nil {
+		return nil, err
+	}
+	limit := 50
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		limit, err = strconv.Atoi(raw)
+		if err != nil {
+			return nil, apperr.New(apperr.CodeInvalid, "limit 必须在 1–200 之间")
+		}
+	}
+	principal, err := a.bearer(r)
+	if err != nil {
+		return nil, err
+	}
+	return a.auth.AdminSessions(ctx, principal, target, r.URL.Query().Get("after"), limit)
+}
+
 // AdminRevokeSession 是标准 Endpoint，必须经 Authenticate + Wrap 注册。
 func (a *API) AdminRevokeSession(ctx context.Context, actor *model.User, r *http.Request) (any, error) {
 	if a.auth == nil {

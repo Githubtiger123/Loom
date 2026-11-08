@@ -61,7 +61,7 @@ func notebookView(n *model.Notebook) dto.NotebookView {
 	return dto.NotebookView{ID: n.ID, InstanceID: n.InstanceID, GroupID: n.GroupID,
 		Name: n.Name, DisplayName: n.DisplayName, Description: n.Description, CreatedBy: n.CreatedBy, OwnerUserID: n.OwnerUserID, OwnerRevision: n.OwnerRevision,
 		ImageID: n.ImageID, ServerType: n.ServerType, CPUMilli: n.CPUMilli, MemoryBytes: n.MemoryBytes, GPU: n.GPUCount,
-		WorkspaceSizeBytes: n.WorkspaceSizeBytes, WorkspaceOwnership: n.WorkspaceOwnership, IdleStopMinutes: n.IdleStopMinutes,
+		WorkspaceSizeBytes: n.WorkspaceSizeBytes, WorkspaceID: n.WorkspaceID, WorkspaceOwnership: n.WorkspaceOwnership, IdleStopMinutes: n.IdleStopMinutes,
 		NotebookState: notebookState(n), CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, DeletedAt: n.DeletedAt}
 }
 

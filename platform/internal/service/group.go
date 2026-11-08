@@ -54,13 +54,24 @@ func (s *Service) CreateGroup(ctx context.Context, actor uint64, key string, in 
 }
 
 type GroupMetadata struct {
+	DisplayName *string                `json:"displayName,omitempty"`
+	Description *string                `json:"description,omitempty"`
+	Expected    *GroupMetadataSnapshot `json:"expected,omitempty"`
+}
+
+// 元数据使用旧值比较，避免为展示字段变更递增集群执行器的 revision。
+// Expected 可选以兼容既有客户端；新客户端应提交读取时的完整元数据快照。
+type GroupMetadataSnapshot struct {
 	DisplayName string `json:"displayName"`
 	Description string `json:"description"`
 }
 
 func (s *Service) UpdateGroup(ctx context.Context, actor, groupID uint64, key string, in GroupMetadata) (*model.Operation, error) {
-	if !validator.MaxTextLength(in.DisplayName, 128) || !validator.MaxTextLength(in.Description, 1000) {
+	if (in.DisplayName != nil && !validator.MaxTextLength(*in.DisplayName, 128)) || (in.Description != nil && !validator.MaxTextLength(*in.Description, 1000)) {
 		return nil, apperr.New(apperr.CodeInvalid, "名称或描述过长")
+	}
+	if in.DisplayName == nil && in.Description == nil {
+		return nil, apperr.New(apperr.CodeInvalid, "至少修改一个元数据字段")
 	}
 	return s.mutate(ctx, actor, groupID, key, "group.update", "group.metadata.update", "group", fmt.Sprint(groupID), in, func(st *repository.Store, o *model.Operation) error {
 		g, err := st.Group(ctx, groupID, true)
@@ -70,8 +81,18 @@ func (s *Service) UpdateGroup(ctx context.Context, actor, groupID uint64, key st
 		if g.Status == "DELETING" || g.Status == "DELETED" {
 			return apperr.New(apperr.CodeConflict, "删除中的空间不可修改")
 		}
+		if in.Expected != nil && (in.Expected.DisplayName != g.DisplayName || in.Expected.Description != g.Description) {
+			return apperr.New(apperr.CodeConflict, "空间名称或描述已变化，请重新读取后编辑")
+		}
+		updates := map[string]any{}
+		if in.DisplayName != nil {
+			updates["display_name"] = *in.DisplayName
+		}
+		if in.Description != nil {
+			updates["description"] = *in.Description
+		}
 		if err := st.DB.WithContext(ctx).Model(&model.Group{}).Where("id = ?", groupID).
-			Updates(map[string]any{"display_name": in.DisplayName, "description": in.Description}).Error; err != nil {
+			Updates(updates).Error; err != nil {
 			return err
 		}
 		return result(o, in)

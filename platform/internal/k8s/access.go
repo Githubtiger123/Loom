@@ -226,7 +226,7 @@ func (c *Client) ReconcileAccess(ctx context.Context, t AccessTarget, guard func
 		}
 	}
 	for _, ap := range aps {
-		if ap.GetName() == name || (ap.GetName() == "ns-owner-access-istio" && c.ownerPolicyMatches(ap, t.Space.Owner)) {
+		if ap.GetName() == name || (ap.GetName() == "ns-owner-access-istio" && c.ownerPolicyMatches(&ap, t.Space.Owner)) {
 			continue
 		}
 		if c.policyMayGrant(ap, t.Username) {

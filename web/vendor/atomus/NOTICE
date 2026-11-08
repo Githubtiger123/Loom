@@ -1,0 +1,15 @@
+Atomus — NOTICE
+
+The code in this repository (design tokens, CSS, Tailwind and shadcn/ui presets,
+React components, Code Connect templates, guidelines, docs and scripts) is
+released under the MIT License — see LICENSE.
+
+The MIT License does NOT cover the Atomus Figma file (the Atomus design-system
+library in Figma, including its components, variables, styles and premium
+blocks). The Figma file is a separate commercial product, sold at
+https://stanvision.gumroad.com/l/atomus-design-system and licensed under the
+terms of that purchase. Figma node URLs referenced in this repository point to
+that file; referencing them does not grant access to or a licence for it.
+
+"Atomus" and "StanVision" are names of StanVision. The MIT License does not
+grant rights to use these names to endorse or promote derived products.

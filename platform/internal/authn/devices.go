@@ -61,6 +61,67 @@ func (m *Manager) Sessions(ctx context.Context, principal *Principal, after stri
 	return page, authFailure(err)
 }
 
+// AdminSessions 仅返回同认证域内的有效设备元数据，不返回任何 Token/摘要。
+func (m *Manager) AdminSessions(ctx context.Context, principal *Principal, target uint64, after string, limit int) (*dto.AuthSessionPage, error) {
+	if principal == nil || principal.User == nil {
+		return nil, denied()
+	}
+	if after != "" {
+		if err := dto.ValidateAuthFamily(after); err != nil {
+			return nil, err
+		}
+	}
+	if target == 0 || limit < 1 || limit > 200 {
+		return nil, apperr.New(apperr.CodeInvalid, "用户 ID 或分页参数无效")
+	}
+	var page *dto.AuthSessionPage
+	err := repository.InTx(ctx, m.DB, func(st *repository.Store) error {
+		if err := st.LockAuthorization(ctx); err != nil {
+			return err
+		}
+		actor, err := m.sessionActor(ctx, st, principal.User, true)
+		if err != nil {
+			return err
+		}
+		if err := (rbac.Checker{Store: st}).Require(ctx, actor.ID, 0, "user.manage"); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		current, err := st.AuthSession(ctx, principal.SessionID, m.domain(), actor.ID, true)
+		if err != nil {
+			return tokenReadError(err)
+		}
+		if current.SessionVersion != actor.SessionVersion || current.RevokedAt != nil || !current.ExpiresAt.After(now) {
+			return denied()
+		}
+		u, err := st.User(ctx, target, true)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return apperr.New(apperr.CodeNotFound, "用户不存在")
+			}
+			return err
+		}
+		if u.Issuer != m.Config.Issuer || u.Subject == nil {
+			return apperr.New(apperr.CodeInvalid, "目标不是当前认证域内的本地用户")
+		}
+		rows, err := st.AuthSessions(ctx, m.domain(), target, u.SessionVersion, after, limit+1, now)
+		if err != nil {
+			return err
+		}
+		page = &dto.AuthSessionPage{Items: []dto.AuthSession{}}
+		if len(rows) > limit {
+			rows = rows[:limit]
+			page.NextAfter = rows[len(rows)-1].FamilyID
+		}
+		for _, row := range rows {
+			page.Items = append(page.Items, dto.AuthSession{FamilyID: row.FamilyID, Current: target == actor.ID && row.FamilyID == principal.SessionID,
+				CreatedAt: row.CreatedAt, LastRefreshedAt: row.LastRefreshedAt, ExpiresAt: row.ExpiresAt})
+		}
+		return nil
+	})
+	return page, authFailure(err)
+}
+
 // sessionActor 在持有授权锁的事务内重新校验用户版本及强制改密状态。
 func (m *Manager) sessionActor(ctx context.Context, st *repository.Store, actor *model.User, requireChanged bool) (*model.User, error) {
 	if actor == nil {

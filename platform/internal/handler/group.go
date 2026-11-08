@@ -33,6 +33,14 @@ func (a *API) Group(ctx context.Context, u *model.User, r *http.Request) (any, e
 	return a.service.Group(ctx, u.ID, id)
 }
 
+func (a *API) GroupPermissions(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	id, err := pathID(r, "gid")
+	if err != nil {
+		return nil, err
+	}
+	return a.service.GroupPermissions(ctx, u.ID, id)
+}
+
 func (a *API) UpdateGroup(ctx context.Context, u *model.User, r *http.Request) (any, error) {
 	id, err := pathID(r, "gid")
 	if err != nil {

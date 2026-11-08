@@ -17,7 +17,13 @@ type RoleGrant struct {
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 type ReplaceRoles struct {
-	Roles []RoleGrant `json:"roles"`
+	Roles            []RoleGrant       `json:"roles"`
+	ExpectedBindings *[]BindingVersion `json:"expectedBindings,omitempty"`
+}
+
+type BindingVersion struct {
+	ID      uint64 `json:"id"`
+	Version uint64 `json:"version"`
 }
 
 func (s *Service) ReplaceRoles(ctx context.Context, actor, userID, groupID uint64, key string, in ReplaceRoles) (*model.Operation, error) {
@@ -27,6 +33,9 @@ func (s *Service) ReplaceRoles(ctx context.Context, actor, userID, groupID uint6
 	}
 	if len(in.Roles) > 32 {
 		return nil, apperr.New(apperr.CodeInvalid, "单个用户最多绑定 32 个角色")
+	}
+	if in.ExpectedBindings != nil && len(*in.ExpectedBindings) > 32 {
+		return nil, apperr.New(apperr.CodeInvalid, "旧绑定快照最多 32 项")
 	}
 	return s.mutate(ctx, actor, groupID, key, permission, "member.roles.replace", "user", fmt.Sprintf("%d/%d", groupID, userID), in, func(st *repository.Store, o *model.Operation) error {
 		u, err := st.User(ctx, userID, true)
@@ -48,6 +57,26 @@ func (s *Service) ReplaceRoles(ctx context.Context, actor, userID, groupID uint6
 			}
 			if g.Status != "ACTIVE" && g.Status != "CREATING" && g.Status != "DEGRADED" && !(g.Status == "DISABLED" && len(in.Roles) == 0) {
 				return apperr.New(apperr.CodeConflict, "空间当前状态不允许修改成员")
+			}
+		}
+		// 可选旧绑定集合用于新客户端的并发保护；持有用户/空间锁后比较，
+		// 防止两个管理员使用旧页面互相覆盖。空集合表示仅当尚无有效授权时添加。
+		if in.ExpectedBindings != nil {
+			current, err := st.Bindings(ctx, userID, groupID)
+			if err != nil {
+				return err
+			}
+			expected := map[uint64]uint64{}
+			for _, binding := range *in.ExpectedBindings {
+				expected[binding.ID] = binding.Version
+			}
+			if len(expected) != len(*in.ExpectedBindings) || len(current) != len(expected) {
+				return apperr.New(apperr.CodeConflict, "成员授权已变化，请重新读取后编辑")
+			}
+			for _, binding := range current {
+				if version, ok := expected[binding.ID]; !ok || version != binding.Version {
+					return apperr.New(apperr.CodeConflict, "成员授权已变化，请重新读取后编辑")
+				}
 			}
 		}
 		seen := map[uint64]bool{}

@@ -86,6 +86,10 @@ createdBy 保留历史，ownerUserId/ownerRevision 表示当前负责人；mine 
 不移动空间或 PVC、不自动交接数据。数据负责人未交接时，新负责人不能启动读取旧目录；
 关联实例需先转给同一目标且已停止，或安全解除关联，才能转目录负责人。
 
+Notebook 列表/详情增加只读 `workspaceId`，来自登记的 attachment，用于前端跳转独立目录详情。
+没有 attachment 时为 0（包括某些已完成删除但仍保留 PVC 历史引用的实例），不表示实际文件不存在。
+该字段不是目录访问凭证，目录 GET/写入仍分别核对 workspace 权限和数据负责人。不扩展数据库结构。
+
 删除目录要求独占身份已确认、无关联/历史引用、名称二次确认，显式解除 retained 保护。
 Notebook deleteWorkspace=true 不能绕过登记目录的保留保护。
 受理后 DELETING，action=`workspace.delete`，target=`workspace/<workspaceId>`，

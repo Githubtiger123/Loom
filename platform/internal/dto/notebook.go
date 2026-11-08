@@ -245,6 +245,7 @@ type NotebookView struct {
 	MemoryBytes        int64   `json:"memoryBytes"`
 	GPU                uint    `json:"gpu"`
 	WorkspaceSizeBytes int64   `json:"workspaceSizeBytes"`
+	WorkspaceID        uint64  `json:"workspaceId"`
 	WorkspaceOwnership string  `json:"workspaceOwnership"`
 	IdleStopMinutes    uint    `json:"idleStopMinutes"`
 	NotebookState

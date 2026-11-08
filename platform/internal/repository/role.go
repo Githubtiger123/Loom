@@ -71,6 +71,18 @@ func (s *Store) HasPermission(ctx context.Context, userID, groupID uint64, permi
 		Where("b.scope_type = ? AND b.scope_id = ?", scope, groupID).Count(&count).Error
 	return count > 0, err
 }
+
+// EffectiveGroupPermissionCodes reuses the same validity and scope predicates as
+// HasPermission. This is a UI snapshot, not a replacement for command authorization.
+func (s *Store) EffectiveGroupPermissionCodes(ctx context.Context, userID, groupID uint64) ([]string, error) {
+	codes := []string{}
+	err := s.effective(ctx).
+		Joins("JOIN tb_role_permission rp ON rp.role_id = r.id").
+		Joins("JOIN tb_permission p ON p.id = rp.permission_id").
+		Where("b.user_id = ? AND b.scope_type = ? AND b.scope_id = ? AND p.scope_type = r.scope_type", userID, "group", groupID).
+		Distinct("p.code").Order("p.code").Pluck("p.code", &codes).Error
+	return codes, err
+}
 func (s *Store) Bindings(ctx context.Context, userID, groupID uint64) ([]model.Binding, error) {
 	scope := "global"
 	if groupID > 0 {

@@ -5,6 +5,12 @@
 
 Pipeline 后端新增 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行 IR 快照 + KFP 状态 + MLMD 参数/产物元数据；不包含前端或产物可视化。
 
+前端操作入口可使用 [当前用户空间权限快照](docs/group-permissions.md)，不从全局权限推导组内权限；快照不替代各业务接口授权。
+
+空间元数据局部编辑、旧值校验和成员绑定版本快照见 [空间管理与成员编辑契约](docs/group-management.md)。这是兼容既有调用的接口扩展，不增加表或迁移。
+
+用户详情、全局绑定读取、管理员目标会话及角色/用户状态并发字段见 [平台管理接入契约](docs/platform-administration.md)。前端管理入口在 `/admin`，个人会话在 `/account/sessions`；同样只有源码交付，未真实联调。
+
 ## 持久化与校验约定
 
 业务路由统一放在 `internal/route/route.go` 一个文件中，按模块注释分组；`route.New` 统一装配认证。对应请求处理方法仍按模块放在 `internal/handler`，handler 不注册 URL。入口通过 `route.New(handler.New(...))` 完成组装，原有接口路径及响应约定保持不变。

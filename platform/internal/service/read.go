@@ -19,6 +19,24 @@ func (s *Service) Users(ctx context.Context, actor, after uint64, limit int) ([]
 	}
 	return s.Store.Users(ctx, after, limit)
 }
+
+func (s *Service) User(ctx context.Context, actor, id uint64) (*model.User, error) {
+	if err := s.Require(ctx, actor, 0, "user.read"); err != nil {
+		return nil, err
+	}
+	u, err := s.Store.User(ctx, id, false)
+	return u, domainError(err)
+}
+
+func (s *Service) UserGlobalRoles(ctx context.Context, actor, id uint64) ([]model.Binding, error) {
+	if err := s.Require(ctx, actor, 0, "role.manage"); err != nil {
+		return nil, err
+	}
+	if _, err := s.Store.User(ctx, id, false); err != nil {
+		return nil, domainError(err)
+	}
+	return s.Store.Bindings(ctx, id, 0)
+}
 func (s *Service) Roles(ctx context.Context, actor uint64) ([]model.Role, error) {
 	if err := s.Require(ctx, actor, 0, "role.manage"); err != nil {
 		return nil, err

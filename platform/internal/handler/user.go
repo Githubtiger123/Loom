@@ -20,6 +20,29 @@ func (a *API) Users(ctx context.Context, u *model.User, r *http.Request) (any, e
 	return a.service.Users(ctx, u.ID, after, limit)
 }
 
+func (a *API) User(ctx context.Context, actor *model.User, r *http.Request) (any, error) {
+	id, err := pathID(r, "uid")
+	if err != nil {
+		return nil, err
+	}
+	u, err := a.service.User(ctx, actor.ID, id)
+	if err != nil {
+		return nil, err
+	}
+	return struct {
+		*model.User
+		LocalAccount bool `json:"localAccount"`
+	}{u, a.auth != nil && u.Issuer == a.auth.Config.Issuer}, nil
+}
+
+func (a *API) UserGlobalRoles(ctx context.Context, actor *model.User, r *http.Request) (any, error) {
+	id, err := pathID(r, "uid")
+	if err != nil {
+		return nil, err
+	}
+	return a.service.UserGlobalRoles(ctx, actor.ID, id)
+}
+
 func (a *API) CreateUser(ctx context.Context, u *model.User, r *http.Request) (any, error) {
 	in, err := decode[service.RegisterUser](r)
 	if err != nil {

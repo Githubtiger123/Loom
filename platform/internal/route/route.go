@@ -16,6 +16,9 @@ func New(api *handler.API) http.Handler {
 	// 用户。
 	register(mux, api, "GET /api/v1/me", api.Me)
 	register(mux, api, "GET /api/v1/users", api.Users)
+	register(mux, api, "GET /api/v1/users/{uid}", api.User)
+	register(mux, api, "GET /api/v1/users/{uid}/roles", api.UserGlobalRoles)
+	register(mux, api, "GET /api/v1/users/{uid}/auth/sessions", api.AdminSessions)
 	register(mux, api, "POST /api/v1/users", api.CreateUser)
 	register(mux, api, "POST /api/v1/local-users", api.CreateLocalUser)
 	register(mux, api, "PUT /api/v1/users/{uid}/roles", api.ReplaceUserRoles)
@@ -34,6 +37,7 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "GET /api/v1/groups", api.Groups)
 	register(mux, api, "POST /api/v1/groups", api.CreateGroup)
 	register(mux, api, "GET /api/v1/groups/{gid}", api.Group)
+	register(mux, api, "GET /api/v1/groups/{gid}/me/permissions", api.GroupPermissions)
 	register(mux, api, "PATCH /api/v1/groups/{gid}", api.UpdateGroup)
 	register(mux, api, "POST /api/v1/groups/{gid}/disable", api.DisableGroup)
 	register(mux, api, "POST /api/v1/groups/{gid}/restore", api.RestoreGroup)

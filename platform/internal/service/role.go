@@ -14,13 +14,14 @@ import (
 )
 
 type SaveRole struct {
-	Code        string   `json:"code"`
-	Name        string   `json:"name"`
-	Scope       string   `json:"scope"`
-	AccessLevel string   `json:"accessLevel"`
-	Enabled     bool     `json:"enabled"`
-	Description string   `json:"description"`
-	Permissions []string `json:"permissions"`
+	Code            string   `json:"code"`
+	Name            string   `json:"name"`
+	Scope           string   `json:"scope"`
+	AccessLevel     string   `json:"accessLevel"`
+	Enabled         bool     `json:"enabled"`
+	Description     string   `json:"description"`
+	Permissions     []string `json:"permissions"`
+	ExpectedVersion *uint64  `json:"expectedVersion,omitempty"`
 }
 
 func (s *Service) SaveRole(ctx context.Context, actor, id uint64, key string, in SaveRole) (*model.Operation, error) {
@@ -62,6 +63,9 @@ func (s *Service) SaveRole(ctx context.Context, actor, id uint64, key string, in
 			}
 			if r.Builtin {
 				return apperr.New(apperr.CodeForbidden, "内置角色只能通过版本升级调整")
+			}
+			if in.ExpectedVersion != nil && r.Version != *in.ExpectedVersion {
+				return apperr.New(apperr.CodeConflict, "角色配置已变化，请重新读取后编辑")
 			}
 			if r.Code != in.Code || r.Scope != in.Scope {
 				return apperr.New(apperr.CodeInvalid, "角色编码与范围不可修改")
