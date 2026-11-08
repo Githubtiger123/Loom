@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/kubeflow/community-distribution/common/kubeflow-roles/base?ref=96e316a80e257a9f645c7c1ee0e1a94b904dead7
+  - https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/kubeflow-istio-resources/base/cluster-roles.yaml
+patches:
+  # 聚合角色的 rules 由 Kubernetes 聚合控制器维护，SSA 不占用该字段。
+  - patch: |-
+      - op: remove
+        path: /rules
+    target:
+      kind: ClusterRole
+      name: kubeflow-(admin|edit|view|istio-admin)

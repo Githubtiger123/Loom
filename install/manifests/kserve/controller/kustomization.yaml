@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+patches:
+  - patch: |-
+      $patch: delete
+      apiVersion: serving.kserve.io/v1alpha1
+      kind: ClusterServingRuntime
+      metadata:
+        name: unused
+    target:
+      kind: ClusterServingRuntime
+  - patch: |-
+      $patch: delete
+      apiVersion: serving.kserve.io/v1alpha1
+      kind: ClusterStorageContainer
+      metadata:
+        name: unused
+    target:
+      kind: ClusterStorageContainer

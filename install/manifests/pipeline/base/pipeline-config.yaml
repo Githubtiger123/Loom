@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pipeline-install-config
+  namespace: kubeflow
+data:
+  USERID_HEADER: kubeflow-userid
+  USERID_PREFIX: ""
+  defaultSecurityContextRunAsUser: ""
+  defaultSecurityContextRunAsGroup: ""
+  defaultSecurityContextRunAsNonRoot: ""
+# 上游锁定快照已配置 archiveLogs: true，保留其 S3/keyFormat。

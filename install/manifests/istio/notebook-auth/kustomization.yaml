@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+patches:
+  - path: mesh.yaml
+  - patch: |-
+      - op: replace
+        path: /spec/rules
+        value:
+          - to:
+              - operation:
+                  hosts: [notebooks.example.com]
+                  paths: [/notebook/*]
+          - to:
+              - operation:
+                  hosts: [notebooks.example.com]
+                  paths: [/api/v1/auth/notebook-session]
+                  methods: [POST, OPTIONS]
+    target:
+      kind: AuthorizationPolicy
+      name: istio-ingressgateway

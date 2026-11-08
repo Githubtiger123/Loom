@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeflow-system
+  labels:
+    control-plane: kubeflow
+    # Trainer/JobSet 使用原生 TLS webhook 和证书管理，不依赖 mesh 身份。
+    # 避免 Loom 的全局 mesh deny-all 干扰控制器 webhook/status listener。
+    istio-injection: disabled
+    pod-security.kubernetes.io/enforce: restricted

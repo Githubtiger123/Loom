@@ -1,0 +1,6 @@
+app.kubernetes.io/part-of: kubeflow-profile
+istio-injection: enabled
+pod-security.kubernetes.io/enforce: baseline
+# 为之后启用模块预留；标签本身不安装任何组件。
+pipelines.kubeflow.org/enabled: "true"
+serving.kubeflow.org/inferenceservice: enabled

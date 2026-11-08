@@ -1,0 +1,44 @@
+# 专用新集群使用的完整 mesh 值，不可直接覆盖任意已有 Istio mesh。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: istio
+  namespace: istio-system
+data:
+  mesh: |-
+    accessLogFile: /dev/stdout
+    defaultConfig:
+      discoveryAddress: istiod.istio-system.svc:15012
+      proxyMetadata: {}
+      tracing: {}
+    enablePrometheusMerge: true
+    rootNamespace: istio-system
+    tcpKeepalive:
+      interval: 5s
+      probes: 3
+      time: 10s
+    trustDomain: cluster.local
+    extensionProviders:
+      - name: loom-auth
+        envoyExtAuthzHttp:
+          service: loom-api.loom-system.svc.cluster.local
+          port: 8080
+          pathPrefix: /verify
+          timeout: 5s
+          failOpen: false
+          includeRequestHeadersInCheck:
+            - host
+            - authorization
+            - cookie
+            - origin
+            - sec-fetch-site
+            - sec-fetch-mode
+            - sec-fetch-dest
+            - upgrade
+          headersToUpstreamOnAllow:
+            - kubeflow-userid
+            - oidc-sub
+            - cookie
+            - authorization
+          headersToDownstreamOnDeny:
+            - content-type

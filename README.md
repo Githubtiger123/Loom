@@ -19,7 +19,7 @@
 
 ## 本地启动
 
-首次连接真实集群时，先按 [集群依赖安装说明](install/README.md) 准备 Profile/Notebook 控制器等资源。修改 `install/config.local.yaml` 后运行一个安装入口；Pipeline、KServe 可按需开启。该脚本不部署 Loom API/web，也不执行业务数据库初始化，本次未执行安装或验证集成。
+首次连接真实集群时，先按 [集群依赖安装说明](install/README.md) 准备 Profile/Notebook 控制器等资源。资源适配在 `install/manifests/`，直接运行 `bash install/install.sh <kubectl-context>`；脚本按顺序 apply/wait，Pipeline、KServe、Trainer 可按需开启，不依赖 Python。Trainer 安装包括 JobSet 与官方训练运行时，不代表其 Loom 业务执行器已完成。该脚本不部署 Loom API/web，也不执行业务数据库初始化，本次未执行安装或验证集成。
 
 ```bash
 # 后端
