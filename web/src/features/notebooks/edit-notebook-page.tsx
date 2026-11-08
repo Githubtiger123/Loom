@@ -121,7 +121,7 @@ function EditNotebookForm({
     onSuccess: (operation) => {
       void client.invalidateQueries({ queryKey: notebookKeys.all(groupId) });
       if (!mounted.current) return;
-      void navigate(`/g/${groupId}/notebooks/${baseline.id}`, {
+      void navigate(`/workspaces/${groupId}/notebooks/${baseline.id}`, {
         replace: true,
         state: { operationId: operation.operationId },
       });
@@ -134,7 +134,7 @@ function EditNotebookForm({
   return (
     <div className="stack spacious">
       <UnsavedChangesGuard when={isDirty && !mutation.isPending && !mutation.isSuccess} />
-      <Link className="text-link" to={`/g/${groupId}/notebooks/${baseline.id}`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/notebooks/${baseline.id}`}>
         ← 返回环境详情
       </Link>
       <PageHeading
@@ -167,7 +167,7 @@ function EditNotebookForm({
                 hierarchy="outline"
                 disabled={mutation.isPending}
                 onClick={() => {
-                  void navigate(`/g/${groupId}/notebooks/${baseline.id}`);
+                  void navigate(`/workspaces/${groupId}/notebooks/${baseline.id}`);
                 }}
               >
                 取消

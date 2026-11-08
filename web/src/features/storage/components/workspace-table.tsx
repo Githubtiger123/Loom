@@ -15,7 +15,7 @@ export function WorkspaceTable({ rows, groupId }: { rows: Workspace[]; groupId: 
           key: 'pvcName',
           header: '工作目录',
           render: (row) => (
-            <Link className="text-link" to={`/g/${groupId}/storage/${row.id}`}>
+            <Link className="text-link" to={`/workspaces/${groupId}/storage/${row.id}`}>
               {row.pvcName}
             </Link>
           ),

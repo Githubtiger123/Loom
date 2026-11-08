@@ -1,0 +1,42 @@
+# Deployment.spec.template.spec 的片段，不是可以直接 kubectl apply 的资源。
+# API 使用 loom-api SA；pipeline-worker 使用 loom-pipeline SA。
+# projected token 的 audience 与锁定 KFP 的默认 TokenReview audience 一致。
+# 不要把用户 Access JWT 或长期生成的 SA Secret 写在这里。
+serviceAccountName: loom-pipeline
+automountServiceAccountToken: false
+volumes:
+  - name: kube-api-access
+    projected:
+      sources:
+        - serviceAccountToken:
+            path: token
+            expirationSeconds: 3600
+        - configMap:
+            name: kube-root-ca.crt
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - downwardAPI:
+            items:
+              - path: namespace
+                fieldRef:
+                  fieldPath: metadata.namespace
+  - name: kfp-token
+    projected:
+      sources:
+        - serviceAccountToken:
+            path: token
+            audience: pipelines.kubeflow.org
+            expirationSeconds: 3600
+# 合并到你的真实容器，不要把 image 占位值用于部署。
+containers:
+  - name: platform
+    image: YOUR-REGISTRY/loom-platform:YOUR-TAG
+    args: [-cmd, pipeline-worker]
+    volumeMounts:
+      - name: kube-api-access
+        mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        readOnly: true
+      - name: kfp-token
+        mountPath: /var/run/secrets/kfp
+        readOnly: true

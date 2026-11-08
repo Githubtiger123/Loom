@@ -54,7 +54,7 @@ function MembersContent({ groupId, allowed }: { groupId: string; allowed: boolea
         description="业务角色决定平台操作权限；原生访问单独异步落实，不代表拥有相同的平台权限。"
         actions={
           manage && canManageMembers(group.status) ? (
-            <Link className="action-link" to={`/g/${groupId}/members/new`}>
+            <Link className="action-link" to={`/workspaces/${groupId}/members/new`}>
               添加已有用户
             </Link>
           ) : undefined
@@ -71,7 +71,7 @@ function MembersContent({ groupId, allowed }: { groupId: string; allowed: boolea
           ]}
         />
         {permissions.can('group.owner.transfer') && canManageMembers(group.status) && (
-          <Link className="text-link" to={`/g/${groupId}/members/transfer`}>
+          <Link className="text-link" to={`/workspaces/${groupId}/members/transfer`}>
             负责人交接
           </Link>
         )}

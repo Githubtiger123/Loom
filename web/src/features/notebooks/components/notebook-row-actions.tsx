@@ -24,7 +24,7 @@ export function NotebookRowActions({
   return (
     <div className="actions">
       {can('notebook.update') && !isNotebookBusy(row) && !deleting && activeGroup && (
-        <Link className="text-link small" to={`/g/${groupId}/notebooks/${row.id}/edit`}>
+        <Link className="text-link small" to={`/workspaces/${groupId}/notebooks/${row.id}/edit`}>
           编辑
         </Link>
       )}

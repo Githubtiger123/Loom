@@ -9,6 +9,7 @@ import { ensureSession, login, trustedHeaderMode } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { useSession } from '@/lib/use-session';
 import { ErrorState, Loading } from '@/components/feedback';
+import { loginReturnPath } from './policy';
 
 const schema = z.object({
   username: z.string().trim().min(1, '请输入账号'),
@@ -30,8 +31,7 @@ export function LoginPage() {
   useEffect(() => {
     void ensureSession();
   }, []);
-  const from = (location.state as { from?: string } | null)?.from;
-  const target = from?.startsWith('/') && !from.startsWith('//') && from !== '/login' ? from : '/';
+  const target = loginReturnPath((location.state as { from?: unknown } | null)?.from);
   if (session.state === 'checking') return <Loading label="正在恢复会话" />;
   if (session.state === 'authenticated')
     return <Navigate to={session.passwordChangeRequired ? '/password' : target} replace />;

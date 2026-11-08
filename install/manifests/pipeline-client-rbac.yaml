@@ -1,0 +1,42 @@
+# KFP TokenReview 使用的机器身份；不创建任何业务用户。
+# 独立 pipeline-worker 使用此 SA，自身 Kubernetes 凭据与 KFP projected token 分离。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-pipeline
+  namespace: loom-system
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loom-pipeline-client
+rules:
+  - apiGroups: [pipelines.kubeflow.org]
+    resources: [pipelines, pipelineversions, experiments, runs]
+    verbs: [get, list, create, update, delete, terminate, archive, unarchive, readArtifact, readLog]
+  - apiGroups: [""]
+    resources: [pods, events, namespaces, persistentvolumeclaims]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-pipeline-client
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-pipeline-client
+subjects:
+  - kind: ServiceAccount
+    name: loom-pipeline
+    namespace: loom-system
+  - kind: ServiceAccount
+    name: loom-api
+    namespace: loom-system

@@ -5,6 +5,7 @@ import { ensureSession } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { useSession } from '@/lib/use-session';
 import { ErrorState, Loading } from '@/components/feedback';
+import { loginReturnPath } from '@/features/auth/policy';
 
 export function SessionGuard() {
   const session = useSession();
@@ -24,7 +25,13 @@ export function SessionGuard() {
       </div>
     );
   if (session.state === 'anonymous')
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ from: loginReturnPath(`${location.pathname}${location.search}${location.hash}`) }}
+      />
+    );
   if (session.passwordChangeRequired && location.pathname !== '/password')
     return <Navigate to="/password" replace />;
   return <Outlet />;

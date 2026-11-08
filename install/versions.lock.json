@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/kubeflow/community-distribution.git",
+  "revision": "96e316a80e257a9f645c7c1ee0e1a94b904dead7",
+  "components": {
+    "profiles": "v2.0.1",
+    "notebooks-v1": "v1.11.1",
+    "pipelines": "2.18.0",
+    "argo-workflows": "v4.1.6",
+    "kserve": "v0.21.0",
+    "istio": "1.31.3",
+    "cert-manager": "1.21.2"
+  }
+}

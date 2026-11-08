@@ -31,7 +31,7 @@ function EditContent({ groupId, allowed }: { groupId: string; allowed: boolean }
   });
   return (
     <>
-      <Link className="text-link" to={`/g/${groupId}/quota`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/quota`}>
         ← 返回资源配额
       </Link>
       <PageHeading

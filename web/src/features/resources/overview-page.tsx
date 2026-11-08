@@ -75,7 +75,7 @@ export function OverviewPage() {
               supportingText={description}
               padding="lg"
               footer={
-                <Link className="text-link" to={`/g/${groupId}/${path}`}>
+                <Link className="text-link" to={`/workspaces/${groupId}/${path}`}>
                   {action}
                   <ArrowUpRight size={16} />
                 </Link>

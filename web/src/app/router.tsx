@@ -1,4 +1,4 @@
-import { createBrowserRouter, Link, Navigate, useRouteError } from 'react-router-dom';
+import { createBrowserRouter, Link, Navigate, useLocation, useRouteError } from 'react-router-dom';
 import { SessionGuard } from './guard';
 import { Shell } from './shell';
 import { LoginPage } from '@/features/auth/login-page';
@@ -9,7 +9,7 @@ import { ResourcePage } from '@/features/resources/resource-page';
 import { ResourceDetailPage } from '@/features/resources/resource-detail-page';
 import { NotebooksPage } from '@/features/notebooks/notebooks-page';
 import { NotebookDetailPage } from '@/features/notebooks/notebook-detail-page';
-import { CreateNotebookPage } from '@/features/notebooks/create-notebook';
+import { CreateNotebookDialog } from '@/features/notebooks/create-notebook';
 import { EditNotebookPage } from '@/features/notebooks/edit-notebook-page';
 import { ErrorState } from '@/components/feedback';
 import { CreateGroupPage } from '@/features/groups/create-group-page';
@@ -32,6 +32,24 @@ import { StoragePage } from '@/features/storage/storage-page';
 import { WorkspaceDetailPage } from '@/features/storage/workspace-detail-page';
 import { TransferWorkspaceOwnerPage } from '@/features/storage/transfer-owner-page';
 import { TransferNotebookOwnerPage } from '@/features/notebooks/transfer-owner-page';
+import { AccountLayout } from '@/features/account/account-layout';
+import { ProfilePage } from '@/features/account/profile-page';
+import { AccountPasswordPage } from '@/features/account/password-page';
+
+// Preserve deep links, filters, anchors and operation-navigation state from old URLs.
+function LegacyWorkspaceRedirect() {
+  const location = useLocation();
+  const pathname = location.pathname.startsWith('/g/')
+    ? location.pathname.replace(/^\/g\//, '/workspaces/')
+    : '/workspaces/new';
+  return (
+    <Navigate
+      to={{ pathname, search: location.search, hash: location.hash }}
+      state={location.state}
+      replace
+    />
+  );
+}
 
 function RouteError() {
   const error = useRouteError();
@@ -50,8 +68,18 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <WorkspacesPage /> },
       { path: '/password', element: <PasswordPage /> },
-      { path: '/spaces/new', element: <CreateGroupPage /> },
-      { path: '/account/sessions', element: <SessionsPage /> },
+      { path: '/workspaces/new', element: <CreateGroupPage /> },
+      { path: '/spaces/new', element: <LegacyWorkspaceRedirect /> },
+      { path: '/g/:groupId/*', element: <LegacyWorkspaceRedirect /> },
+      {
+        path: '/account',
+        element: <AccountLayout />,
+        children: [
+          { index: true, element: <ProfilePage /> },
+          { path: 'password', element: <AccountPasswordPage /> },
+          { path: 'sessions', element: <SessionsPage /> },
+        ],
+      },
       {
         path: '/admin',
         element: <AdminLayout />,
@@ -68,7 +96,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        path: '/g/:groupId',
+        path: '/workspaces/:groupId',
         element: <Shell />,
         children: [
           { index: true, element: <OverviewPage /> },
@@ -79,8 +107,11 @@ export const router = createBrowserRouter([
           { path: 'members/:userId/edit', element: <MemberEditorPage /> },
           { path: 'quota', element: <QuotaPage /> },
           { path: 'quota/edit', element: <EditQuotaPage /> },
-          { path: 'notebooks', element: <NotebooksPage /> },
-          { path: 'notebooks/new', element: <CreateNotebookPage /> },
+          {
+            path: 'notebooks',
+            element: <NotebooksPage />,
+            children: [{ path: 'new', element: <CreateNotebookDialog /> }],
+          },
           { path: 'notebooks/:notebookId', element: <NotebookDetailPage /> },
           { path: 'notebooks/:notebookId/edit', element: <EditNotebookPage /> },
           { path: 'notebooks/:notebookId/transfer', element: <TransferNotebookOwnerPage /> },

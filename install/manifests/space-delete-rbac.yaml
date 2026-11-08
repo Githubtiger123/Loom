@@ -1,0 +1,23 @@
+# 安全删除空间会枚举所有可发现的 namespaced API；这是高信任执行器权限。
+# list Secret 会返回 Secret 内容，不能误认为是仅列名称。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loom-space-delete-inventory
+rules:
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: [list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-space-delete-inventory
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-space-delete-inventory
+subjects:
+  - kind: ServiceAccount
+    name: loom-worker
+    namespace: loom-system

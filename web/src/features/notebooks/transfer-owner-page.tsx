@@ -64,7 +64,7 @@ export function TransferNotebookOwnerPage() {
     canChangeRuntime(row);
   return (
     <div className="stack spacious">
-      <Link className="text-link" to={`/g/${groupId}/notebooks/${notebookId}`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/notebooks/${notebookId}`}>
         ← 返回环境详情
       </Link>
       <PageHeading
@@ -97,7 +97,7 @@ export function TransferNotebookOwnerPage() {
         onAccepted={(op, mounted) => {
           void client.invalidateQueries({ queryKey: notebookKeys.all(groupId) });
           if (mounted)
-            void navigate(`/g/${groupId}/notebooks`, {
+            void navigate(`/workspaces/${groupId}/notebooks`, {
               replace: true,
               state: { operationId: op.operationId },
             });

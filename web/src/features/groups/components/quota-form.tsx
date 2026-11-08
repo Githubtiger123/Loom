@@ -60,7 +60,7 @@ export function QuotaForm({
     onSuccess: (op) => {
       refreshGroup(client, groupId);
       if (mounted.current)
-        void navigate(`/g/${groupId}/quota`, {
+        void navigate(`/workspaces/${groupId}/quota`, {
           replace: true,
           state: { operationId: op.operationId },
         });

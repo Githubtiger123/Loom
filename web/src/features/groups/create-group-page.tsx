@@ -76,7 +76,7 @@ function CreateForm({ allowed }: { allowed: boolean }) {
       const id =
         result && typeof result === 'object' && 'groupId' in result ? result.groupId : undefined;
       if (typeof id === 'number' && Number.isSafeInteger(id) && id > 0) {
-        void navigate(`/g/${id}/settings`, {
+        void navigate(`/workspaces/${id}/settings`, {
           replace: true,
           state: { operationId: op.operationId },
         });

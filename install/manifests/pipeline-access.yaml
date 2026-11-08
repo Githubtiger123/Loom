@@ -1,0 +1,32 @@
+# MLMD grpc-web 只允许 Loom 机器身份；不公开 KFP UI 或元数据接口。
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: loom-metadata-reader
+  namespace: kubeflow
+spec:
+  selector:
+    matchLabels:
+      component: metadata-envoy
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/loom-system/sa/loom-api
+              - cluster.local/ns/loom-system/sa/loom-pipeline
+      to:
+        - operation:
+            ports: ["9090"]
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: loom-metadata-mtls
+  namespace: kubeflow
+spec:
+  selector:
+    matchLabels:
+      component: metadata-envoy
+  mtls:
+    mode: STRICT

@@ -65,7 +65,7 @@ export function TransferWorkspaceOwnerPage() {
     readyWorkspace(row);
   return (
     <div className="stack spacious">
-      <Link className="text-link" to={`/g/${groupId}/storage/${workspaceId}`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/storage/${workspaceId}`}>
         ← 返回目录详情
       </Link>
       <PageHeading
@@ -98,7 +98,7 @@ export function TransferWorkspaceOwnerPage() {
         onAccepted={(op, mounted) => {
           refreshStorage(client, groupId);
           if (mounted)
-            void navigate(`/g/${groupId}/storage`, {
+            void navigate(`/workspaces/${groupId}/storage`, {
               replace: true,
               state: { operationId: op.operationId },
             });

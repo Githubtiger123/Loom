@@ -67,7 +67,7 @@ export function MembersTable({
           render: (m) => (
             <div className="actions">
               {canEdit && (
-                <Link className="text-link" to={`/g/${groupId}/members/${m.userId}/edit`}>
+                <Link className="text-link" to={`/workspaces/${groupId}/members/${m.userId}/edit`}>
                   修改角色
                 </Link>
               )}

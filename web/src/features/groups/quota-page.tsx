@@ -44,7 +44,7 @@ function QuotaContent({ groupId, allowed }: { groupId: string; allowed: boolean 
           me.isSuccess &&
           me.data.permissions.includes('group.quota.update') &&
           canChangeQuota(group.status) ? (
-            <Link className="action-link" to={`/g/${groupId}/quota/edit`}>
+            <Link className="action-link" to={`/workspaces/${groupId}/quota/edit`}>
               调整配额
             </Link>
           ) : undefined

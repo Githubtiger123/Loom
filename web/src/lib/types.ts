@@ -1,6 +1,14 @@
 export type Page<T> = { items: T[]; nextAfter: number | null };
 export type User = { id: number; username: string; displayName: string; status: string };
-export type Me = { user: User; permissions: string[] };
+export type Me = {
+  user: User & {
+    email: string | null;
+    issuer: string;
+    createdAt: string;
+    lastLoginAt: string | null;
+  };
+  permissions: string[];
+};
 export type Tokens = {
   accessToken: string;
   expiresIn: number;

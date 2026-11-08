@@ -9,9 +9,16 @@ platform/vendor/
 web/node_modules/
 web/dist/
 web/.env.local
+web/certs/
 
 # 本地配置
 platform/configs/config.local.yaml
+install/config.local.yaml
+install/.sources/
+install/.generated/
+install/.state/
+install/.venv/
+install/scripts/__pycache__/
 
 # IDE
 .idea/

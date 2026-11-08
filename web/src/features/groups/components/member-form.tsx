@@ -76,10 +76,13 @@ export function MemberForm({
     onSuccess: (op, v) => {
       refreshGroup(client, groupId);
       if (!mounted.current) return;
-      void navigate(Number(v.userId) === permissions.data?.userId ? '/' : `/g/${groupId}/members`, {
-        replace: true,
-        state: { operationId: op.operationId },
-      });
+      void navigate(
+        Number(v.userId) === permissions.data?.userId ? '/' : `/workspaces/${groupId}/members`,
+        {
+          replace: true,
+          state: { operationId: op.operationId },
+        },
+      );
     },
   });
   const conflict = mutation.error instanceof ApiError && [403, 409].includes(mutation.error.status);
@@ -118,7 +121,7 @@ export function MemberForm({
           {existing && (
             <p>
               该用户已有空间角色，
-              <Link className="text-link" to={`/g/${groupId}/members/${userId}/edit`}>
+              <Link className="text-link" to={`/workspaces/${groupId}/members/${userId}/edit`}>
                 请在编辑页修改
               </Link>
               。

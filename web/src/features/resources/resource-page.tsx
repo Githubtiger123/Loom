@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -89,7 +89,7 @@ export function ResourcePage({ kind }: { kind: ResourceKind }) {
               key: 'name',
               header: '名称',
               render: (row) => (
-                <Link className="text-link" to={`/g/${groupId}/${kind}/${row.id}`}>
+                <Link className="text-link" to={`/workspaces/${groupId}/${kind}/${row.id}`}>
                   {row.displayName || row.name}
                 </Link>
               ),
@@ -167,6 +167,7 @@ function CreateDefinition({
   onCreated: (id: string) => void;
 }) {
   const client = useQueryClient();
+  const formId = useId();
   const {
     register,
     handleSubmit,
@@ -186,33 +187,49 @@ function CreateDefinition({
   return (
     <Modal
       open
+      className="resource-create-dialog"
       title={resourceModules[kind].create}
+      closeButton={!mutation.isPending}
       onClose={() => {
         if (!mutation.isPending) onClose();
       }}
-    >
-      <form className="stack" onSubmit={handleSubmit((values) => mutation.mutate(values))}>
-        <Input
-          label="名称"
-          hint={
-            kind === 'pipelines'
-              ? '小写字母、数字和连字符，最长 63 字符'
-              : '字母、数字、点、下划线或连字符'
-          }
-          {...register('name')}
-          error={errors.name?.message}
-        />
-        <Input label="展示名称" {...register('displayName')} error={errors.displayName?.message} />
-        <Input label="描述" {...register('description')} error={errors.description?.message} />
-        {mutation.isError && <ErrorState error={mutation.error} />}
-        <div className="actions end">
+      actions={
+        <>
           <Button hierarchy="outline" disabled={mutation.isPending} onClick={onClose}>
             取消
           </Button>
-          <Button hierarchy="primary" type="submit" loading={mutation.isPending}>
+          <Button hierarchy="primary" type="submit" form={formId} loading={mutation.isPending}>
             创建
           </Button>
-        </div>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        className="stack"
+        onSubmit={handleSubmit((values) => {
+          if (!mutation.isPending) mutation.mutate(values);
+        })}
+      >
+        <fieldset className="form-fields" disabled={mutation.isPending}>
+          <Input
+            label="名称"
+            hint={
+              kind === 'pipelines'
+                ? '小写字母、数字和连字符，最长 63 字符'
+                : '字母、数字、点、下划线或连字符'
+            }
+            {...register('name')}
+            error={errors.name?.message}
+          />
+          <Input
+            label="展示名称"
+            {...register('displayName')}
+            error={errors.displayName?.message}
+          />
+          <Input label="描述" {...register('description')} error={errors.description?.message} />
+        </fieldset>
+        {mutation.isError && <ErrorState error={mutation.error} />}
       </form>
     </Modal>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { Link, Outlet, useMatch, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Alert, Button } from '@atomus';
 import { Plus } from 'lucide-react';
@@ -18,6 +18,7 @@ import { NotebookToolbar } from './components/notebook-toolbar';
 export function NotebooksPage() {
   const { groupId = '' } = useParams();
   const group = useOutletContext<Group>();
+  const creating = !!useMatch('/workspaces/:groupId/notebooks/new');
   const navigate = useNavigate();
   const permissions = useGroupPermissions(groupId);
   const [filters, setFilters] = useState<NotebookListFilters>({
@@ -61,7 +62,7 @@ export function NotebooksPage() {
         actions={
           <>
             {permissions.can('workspace.read') && (
-              <Link className="text-link" to={`/g/${groupId}/storage`}>
+              <Link className="text-link" to={`/workspaces/${groupId}/storage`}>
                 工作目录资产
               </Link>
             )}
@@ -71,7 +72,9 @@ export function NotebooksPage() {
                 disabled={group.status !== 'ACTIVE'}
                 iconLeading={<Plus size={16} />}
                 onClick={() => {
-                  void navigate(`/g/${groupId}/notebooks/new`);
+                  setIntent(undefined);
+                  setOperation(undefined);
+                  void navigate(`/workspaces/${groupId}/notebooks/new`);
                 }}
               >
                 新建环境
@@ -145,7 +148,8 @@ export function NotebooksPage() {
           )}
         </>
       )}
-      {intent && (
+      <Outlet context={group} />
+      {intent && !creating && (
         <NotebookActionDialog
           key={`${intent.row.id}/${intent.row.revision}/${intent.action}`}
           groupId={groupId}
@@ -158,7 +162,7 @@ export function NotebooksPage() {
           }}
         />
       )}
-      {operation && (
+      {operation && !creating && (
         <OperationDialog id={operation} groupId={groupId} onClose={() => setOperation(undefined)} />
       )}
     </div>

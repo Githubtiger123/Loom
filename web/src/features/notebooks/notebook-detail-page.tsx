@@ -97,7 +97,7 @@ function NotebookDetailContent({
   };
   return (
     <div className="stack spacious">
-      <Link className="text-link" to={`/g/${groupId}/notebooks`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/notebooks`}>
         ← 返回开发环境
       </Link>
       <PageHeading
@@ -141,12 +141,12 @@ function NotebookDetailContent({
           ) &&
           canChangeRuntime(row) &&
           group.status === 'ACTIVE' && (
-            <Link className="text-link" to={`/g/${groupId}/notebooks/${row.id}/transfer`}>
+            <Link className="text-link" to={`/workspaces/${groupId}/notebooks/${row.id}/transfer`}>
               交接实例负责人
             </Link>
           )}
         {permissions.can('workspace.read') && row.workspaceId > 0 && (
-          <Link className="text-link" to={`/g/${groupId}/storage/${row.workspaceId}`}>
+          <Link className="text-link" to={`/workspaces/${groupId}/storage/${row.workspaceId}`}>
             管理工作目录
           </Link>
         )}

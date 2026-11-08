@@ -14,10 +14,12 @@
 |---|---|
 | `platform/` | 后端（Go + GORM + MySQL） |
 | `web/` | 前端（React + TypeScript + Atomus） |
-| `install/` | 部署清单 |
+| `install/` | 锁定版本的集群依赖安装脚本、配置与部署清单 |
 | `images/` | 镜像相关 |
 
 ## 本地启动
+
+首次连接真实集群时，先按 [集群依赖安装说明](install/README.md) 准备 Profile/Notebook 控制器等资源。修改 `install/config.local.yaml` 后运行一个安装入口；Pipeline、KServe 可按需开启。该脚本不部署 Loom API/web，也不执行业务数据库初始化，本次未执行安装或验证集成。
 
 ```bash
 # 后端

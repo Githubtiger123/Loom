@@ -22,11 +22,13 @@ Notebook 作为新模块实现的参考：
 
 组件按照独立职责、独立状态、真实复用拆分，而不是按固定行数拆碎。只在 Notebook 内使用的组件保留在模块内部；不要预先抽象一个覆盖 Pipeline、Notebook、模型、推理服务生命周期的万能 CRUD。原有其他模块的基础页仍待各自业务阶段细化。
 
-Atomus 基础组件优先使用真实 props 与 slot；没有 React 导出的 Textarea 使用可访问原生字段和语义变量组合，不猜测组件名、不修改 vendor。业务表单使用独立页面，短确认使用 Modal，不叠加弹窗。
+Atomus 基础组件优先使用真实 props 与 slot；没有 React 导出的 Textarea 使用可访问原生字段和语义变量组合，不猜测组件名、不修改 vendor。长表单默认使用独立页面；Notebook 创建按产品要求使用列表上的路由 Modal，短确认也使用 Modal，不叠加弹窗。
+
+平台管理与空间业务复用 `app/AppFrame`，统一左侧导航、顶部账号入口、主题切换与窄屏导航；两类权限分别由调用方判断，不把全局权限推导为空间权限。Notebook 的 `/workspaces/:groupId/notebooks/new` 是列表子路由，直接访问也展示列表和创建弹窗；字段放在模块职责组件中，内容区滚动、底部按钮固定。未提交离开在当前弹窗内切换确认视图，保留草稿；提交期间禁用关闭及重复提交，受理后回到列表展示操作进度。编辑和交接仍为独立页面，后端接口与真实集群约束不变。
 
 ## Notebook 操作约定
 
-- 创建：受管镜像选择自动携带 serverType；支持名称、展示名、描述、CPU、内存、GPU、空闲策略、新建目录容量或按固定目录 revision 复用本人的空闲独占目录。
+- 创建：在列表上的大号弹窗填写，受管镜像选择自动携带 serverType；支持名称、展示名、描述、CPU、内存、GPU、空闲策略、新建目录容量或按固定目录 revision 复用本人的空闲独占目录。
 - 编辑：固定读取时的 revision；只提交 dirty 字段，保留未编辑的环境变量、标签；CPU/内存/GPU 仅在停止已落实且修订一致时开放。资源更新后不自动启动。
 - 启停删除：独立确认，提示影响，携带 revision；固定保留工作目录，不提供容易误删数据的附带目录删除开关。
 - 幂等：同一个表单或确认弹窗里，未变化的请求体在不确定失败后使用同一 Idempotency-Key；不自动重试写操作。成功后的新意图使用新键。
@@ -99,7 +101,7 @@ Atomus 基础组件优先使用真实 props 与 slot；没有 React 导出的 Te
 ## Notebook 目录与交接实施约定
 
 - `features/storage` 独立维护目录 api / types / form-schema / policy / cache / 页面 / 组件；目录是数据资产，不与空间选择的 `features/workspaces` 混用。`features/ownership` 只复用两个交接流程的输入与表单，端点、权限、状态检查与缓存更新仍各归所属模块，不抽象万能资源 CRUD。
-- 路由为 `/g/:groupId/storage`、`storage/:workspaceId`、`storage/:workspaceId/transfer` 和 `notebooks/:notebookId/transfer`。导航依赖 workspace.read，实例交接另外使用 notebook.transfer / notebook.transfer.any，不拿 notebook.read.any 代替交接权限。
+- 路由为 `/workspaces/:groupId/storage`、`storage/:workspaceId`、`storage/:workspaceId/transfer` 和 `notebooks/:notebookId/transfer`。导航依赖 workspace.read，实例交接另外使用 notebook.transfer / notebook.transfer.any，不拿 notebook.read.any 代替交接权限。
 - 目录列表 after 分页每页 50 条，列表/详情 10 秒更新，失败停止自动读取。筛选只作用于已加载页；实际使用量空值如实展示，不混同 capacityBytes。没有新增文件浏览、磁盘指标、PVC 认领或备份接口。
 - 创建复用目录分页选择属于当前用户、独占身份已确认且没有历史引用的资产，提交 workspaceId + workspaceRevision，并继续提交有效 workspaceSize 作为最小容量。创建的复用选择不允许借管理员身份为新建实例挂载其他人的目录；服务端仍在原事务内重验归属/容量/UID/引用。
 - 关联/解除确认在可见弹窗中读取具体 Notebook，含已删除历史实例；使用独立查询键、AbortSignal 和 gcTime=0。提交目录 revision + notebookRevision；不自动停止、替换已有目录或启动实例。未知失败重放原请求体和原幂等键，版本冲突须关闭后重新核对，不自动改用新的 Notebook 版本。
@@ -108,3 +110,13 @@ Atomus 基础组件优先使用真实 props 与 slot；没有 React 导出的 Te
 - 写操作受理与操作单终态更新目录、Notebook 相关缓存。普通网络错误保留非敏感草稿并关闭写入口；确认撤权/404 后隐藏旧数据。Notebook 返回新增 workspaceId 只用于关联导航，0 表示没有登记 attachment，不代表文件不存在，也不构成目录访问授权。
 
 本阶段仅源码与格式核对，未测试、未类型检查、未编译、未运行或执行迁移。
+
+## 个人中心与统一账号入口
+
+- `/account` 为个人资料，`/account/password` 为主动改密，`/account/sessions` 继续承接原设备会话地址；个人中心复用 `AppFrame`，不嵌套第二个 main 或另建独立账号安全布局。
+- `components/account-controls.tsx` 是首页、空间、平台管理、个人中心的公共账号入口，统一主题切换、身份显示、个人中心、当前设备退出；平台管理按全局有效权限显示，不按用户名或空间角色猜测管理员。没有新增依赖或修改 Atomus vendor。
+- 个人资料复用现有 `/me` 查询与契约，状态和缺省值如实展示。没有后端支持的资料编辑、头像上传和个人审计不展示为可操作能力；不把周期读取 `/me` 时更新的 lastLoginAt 当作可信设备登录时间展示。
+- 首次登录强制改密保留独立 `/password`，非强制访问该旧地址转入个人中心。两种入口复用 `auth/components/PasswordForm`、校验和接口；只在表单和请求期间保留密码，不将其作为 mutation variables 或幂等指纹，关闭自动重试，成功后仍由 SessionGuard 唯一跳转。登录返回策略将个人中心改密地址归到个人中心首页，避免重新登录后再次进入改密表单。
+- 本地退出请求成功后清空内存认证与查询缓存，网络失败不伪造已退出。外部统一认证不调用本地退出、改密或设备接口，页面说明其管理范围。管理员目标用户的设备面板继续留在平台管理，不混入自己的个人中心。
+
+本轮仅源码阅读、修改、格式化和差异空白检查，未新增或运行测试、类型检查、编译、项目或数据库迁移。

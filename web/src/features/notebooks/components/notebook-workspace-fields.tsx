@@ -11,10 +11,12 @@ export function NotebookWorkspaceFields({
   groupId,
   userId,
   allowReuse,
+  disabled = false,
 }: {
   groupId: string;
   userId?: number;
   allowReuse: boolean;
+  disabled?: boolean;
 }) {
   const form = useFormContext<NotebookCreateValues>();
   const reuse = form.watch('workspaceMode') === 'reuse';
@@ -37,6 +39,7 @@ export function NotebookWorkspaceFields({
         render={({ field }) => (
           <Select
             label="目录来源"
+            disabled={disabled}
             value={field.value}
             onChange={field.onChange}
             options={[
@@ -77,6 +80,7 @@ export function NotebookWorkspaceFields({
                 render={({ field }) => (
                   <Select
                     label="已有目录"
+                    disabled={disabled}
                     placeholder="选择目录与修订"
                     value={field.value}
                     error={form.formState.errors.workspaceSelection?.message}

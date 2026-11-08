@@ -26,7 +26,7 @@ export function ResourceDetailPage({ kind }: { kind: ResourceKind }) {
   const row = query.data;
   return (
     <div className="stack spacious">
-      <Link className="text-link" to={`/g/${groupId}/${kind}`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/${kind}`}>
         ← 返回{resourceModules[kind].title}
       </Link>
       <PageHeading title={row.displayName || row.name} description={row.description || row.name} />

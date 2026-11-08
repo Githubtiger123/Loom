@@ -1,15 +1,77 @@
-# 此文件只定义执行器身份与所需权限，不部署程序、不配置认证入口。
-# 审阅后由部署方应用，worker/sync 工作负载使用此 ServiceAccount。
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: loom-system
----
+# 执行器、只读观察器与 API 分离；由 install 脚本在创建 namespace 后应用。
+# 这些是跨空间机器权限；用户权限、对象归属仍由 Loom 检查。
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: loom-worker
   namespace: loom-system
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-sync
+  namespace: loom-system
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-api
+  namespace: loom-system
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loom-resource-reader
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, serviceaccounts, resourcequotas, persistentvolumeclaims, pods, services, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [statefulsets, deployments, replicasets]
+    verbs: [get, list, watch]
+  - apiGroups: [kubeflow.org]
+    resources: [profiles, notebooks]
+    verbs: [get, list, watch]
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [clusterroles, clusterrolebindings, rolebindings]
+    verbs: [get, list]
+  - apiGroups: [security.istio.io]
+    resources: [authorizationpolicies]
+    verbs: [get, list]
+  - apiGroups: [networking.istio.io]
+    resources: [virtualservices]
+    verbs: [get, list, watch]
+  - apiGroups: [serving.kserve.io]
+    resources: [inferenceservices]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [get, list]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-resource-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-resource-reader
+subjects:
+  - kind: ServiceAccount
+    name: loom-worker
+    namespace: loom-system
+  - kind: ServiceAccount
+    name: loom-sync
+    namespace: loom-system
+  - kind: ServiceAccount
+    name: loom-api
+    namespace: loom-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -17,11 +79,14 @@ metadata:
   name: loom-profile-access-worker
 rules:
   - apiGroups: [kubeflow.org]
-    resources: [profiles]
-    verbs: [get, list, create]
+    resources: [profiles, notebooks]
+    verbs: [get, list, create, update, delete]
   - apiGroups: [""]
     resources: [namespaces, serviceaccounts, resourcequotas]
     verbs: [get]
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, create, delete]
   - apiGroups: [rbac.authorization.k8s.io]
     resources: [clusterroles]
     verbs: [get]
@@ -38,11 +103,6 @@ rules:
   - apiGroups: [security.istio.io]
     resources: [authorizationpolicies]
     verbs: [get, list, create, update, delete]
-  # kserve-worker 管理 Loom 业务服务对应的 InferenceService；
-  # 归属、instance 和 UID 仍由应用层逐对象校验。
-  - apiGroups: [serving.kserve.io]
-    resources: [inferenceservices]
-    verbs: [get, list, watch, create, update, delete]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -55,4 +115,68 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: loom-worker
+    namespace: loom-system
+---
+# kserve-worker 独立身份，不授予 Profile/PVC 写权限。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-kserve
+  namespace: loom-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loom-kserve-worker
+rules:
+  - apiGroups: [serving.kserve.io]
+    resources: [inferenceservices]
+    verbs: [get, list, watch, create, update, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-kserve-worker
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-kserve-worker
+subjects:
+  - kind: ServiceAccount
+    name: loom-kserve
+    namespace: loom-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-kserve-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-resource-reader
+subjects:
+  - kind: ServiceAccount
+    name: loom-kserve
+    namespace: loom-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loom-pod-log-reader
+rules:
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-pod-log-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-pod-log-reader
+subjects:
+  - kind: ServiceAccount
+    name: loom-api
     namespace: loom-system

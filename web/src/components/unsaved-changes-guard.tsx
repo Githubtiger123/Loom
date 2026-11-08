@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
-import { useBlocker } from 'react-router-dom';
 import { Button, Modal } from '@atomus';
+import { useUnsavedChangesBlocker } from '@/lib/use-unsaved-changes-blocker';
 
 export function UnsavedChangesGuard({
   when,
@@ -9,21 +8,7 @@ export function UnsavedChangesGuard({
   when: boolean;
   watchSearch?: boolean;
 }) {
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      when &&
-      (currentLocation.pathname !== nextLocation.pathname ||
-        (watchSearch && currentLocation.search !== nextLocation.search)),
-  );
-  useEffect(() => {
-    if (!when) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [when]);
+  const blocker = useUnsavedChangesBlocker(when, watchSearch);
   if (blocker.state !== 'blocked') return null;
   return (
     <Modal

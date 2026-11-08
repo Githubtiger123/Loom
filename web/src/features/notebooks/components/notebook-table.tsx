@@ -36,7 +36,7 @@ export function NotebookTable({
           key: 'name',
           header: '环境名称',
           render: (row) => (
-            <Link className="text-link" to={`/g/${groupId}/notebooks/${row.id}`}>
+            <Link className="text-link" to={`/workspaces/${groupId}/notebooks/${row.id}`}>
               {row.displayName || row.name}
             </Link>
           ),

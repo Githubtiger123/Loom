@@ -44,7 +44,7 @@ function EditorContent({
   const member = members.data?.find((m) => m.userId === Number(userId));
   return (
     <>
-      <Link className="text-link" to={`/g/${groupId}/members`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/members`}>
         ← 返回空间成员
       </Link>
       <PageHeading

@@ -28,7 +28,7 @@ export function WorkspaceReferences({
               <li key={id}>
                 <div className="actions">
                   {canReadNotebook ? (
-                    <Link className="text-link" to={`/g/${groupId}/notebooks/${id}`}>
+                    <Link className="text-link" to={`/workspaces/${groupId}/notebooks/${id}`}>
                       开发环境 #{id}
                     </Link>
                   ) : (

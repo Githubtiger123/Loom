@@ -51,7 +51,7 @@ function TransferForm({ groupId, allowed }: { groupId: string; allowed: boolean 
   });
   return (
     <>
-      <Link className="text-link" to={`/g/${groupId}/members`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/members`}>
         ← 返回空间成员
       </Link>
       <PageHeading

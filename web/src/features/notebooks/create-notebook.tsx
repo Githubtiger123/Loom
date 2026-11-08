@@ -1,54 +1,25 @@
-import { useRef } from 'react';
-import { Controller, FormProvider, useForm } from 'react-hook-form';
+import { useEffect, useId, useRef } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import { Link, useNavigate, useOutletContext, useParams } from 'react-router-dom';
-import { Alert, Button, Card, Input, Select } from '@atomus';
+import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
+import { Alert, Button, Modal } from '@atomus';
 import type { Group, Page } from '@/lib/types';
+import { ApiError } from '@/lib/api';
 import { useGroupPermissions } from '@/lib/use-group-permissions';
 import { useCommandKey } from '@/lib/use-command-key';
 import { useMounted } from '@/lib/use-mounted';
-import { UnsavedChangesGuard } from '@/components/unsaved-changes-guard';
-import { ErrorState, Loading, NoData, PageHeading } from '@/components/feedback';
-import { notebookApi, notebookKeys } from './api';
-import { notebookCreateSchema, type NotebookCreateValues } from './form-schema';
-import { NotebookSettingsFields } from './components/notebook-settings-fields';
-import { NotebookWorkspaceFields } from './components/notebook-workspace-fields';
+import { useUnsavedChangesBlocker } from '@/lib/use-unsaved-changes-blocker';
+import { ErrorState, Loading, NoData } from '@/components/feedback';
 import { storageKeys } from '@/features/storage/api';
 import type { Workspace } from '@/features/storage/types';
 import { readyWorkspace } from '@/features/storage/policy';
+import { notebookApi, notebookKeys } from './api';
+import { notebookCreateSchema, type NotebookCreateValues } from './form-schema';
+import { NotebookCreateFields } from './components/notebook-create-fields';
 
-export function CreateNotebookPage() {
+export function CreateNotebookDialog() {
   const { groupId = '' } = useParams();
-  const permissions = useGroupPermissions(groupId);
-  if (!permissions.data && permissions.isPending) return <Loading />;
-  if (!permissions.data && permissions.isError)
-    return (
-      <ErrorState
-        error={permissions.error}
-        retry={() => {
-          void permissions.refetch();
-        }}
-      />
-    );
-  if (!permissions.data?.permissions.includes('notebook.create'))
-    return <NoData title="没有创建开发环境的权限" description="请联系空间负责人分配权限。" />;
-  return (
-    <div className="stack spacious">
-      {permissions.isError && (
-        <ErrorState
-          error={permissions.error}
-          retry={() => {
-            void permissions.refetch();
-          }}
-        />
-      )}
-      <CreateNotebookForm groupId={groupId} canSubmit={permissions.can('notebook.create')} />
-    </div>
-  );
-}
-
-function CreateNotebookForm({ groupId, canSubmit }: { groupId: string; canSubmit: boolean }) {
   const group = useOutletContext<Group>();
   const permissions = useGroupPermissions(groupId);
   const navigate = useNavigate();
@@ -56,9 +27,14 @@ function CreateNotebookForm({ groupId, canSubmit }: { groupId: string; canSubmit
   const commandKey = useCommandKey();
   const submittedFingerprint = useRef<string | undefined>(undefined);
   const mounted = useMounted();
+  const formId = useId();
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const continueButton = useRef<HTMLButtonElement>(null);
+  const wasConfirming = useRef(false);
   const images = useQuery({
     queryKey: notebookKeys.images(groupId),
     queryFn: ({ signal }) => notebookApi.images(groupId, signal),
+    enabled: permissions.can('notebook.create'),
   });
   const form = useForm<NotebookCreateValues>({
     resolver: zodResolver(notebookCreateSchema),
@@ -76,16 +52,12 @@ function CreateNotebookForm({ groupId, canSubmit }: { groupId: string; canSubmit
       idleStopMinutes: '0',
     },
   });
-  const {
-    register,
-    control,
-    handleSubmit,
-    formState: { errors },
-  } = form;
   const mutation = useMutation({
     mutationFn: (values: NotebookCreateValues) => {
-      if (!canSubmit) throw new Error('当前权限尚未确认，请刷新权限后再提交');
-      const image = images.data?.items.find((entry) => entry.id === values.imageId);
+      if (!permissions.can('notebook.create') || group.status !== 'ACTIVE')
+        throw new Error('当前权限或空间状态不允许创建，请刷新后确认');
+      if (!images.isSuccess) throw new Error('镜像目录尚未确认，请重新读取');
+      const image = images.data.items.find((entry) => entry.id === values.imageId);
       if (!image) throw new Error('所选镜像已不可用，请刷新目录后重新选择');
       const { workspaceMode, workspaceSelection, ...settings } = values;
       if (
@@ -102,9 +74,8 @@ function CreateNotebookForm({ groupId, canSubmit }: { groupId: string; canSubmit
         idleStopMinutes: Number(values.idleStopMinutes),
       };
       const fingerprint = JSON.stringify(body);
-      // An accepted request may already have bound this directory even when its
-      // response was lost. Do not block an unchanged idempotent replay on that
-      // changed list state; the server reauthorizes before replaying its result.
+      // A lost success response may already have bound this directory. Preserve
+      // unchanged idempotent replays instead of rejecting the changed list state.
       if (workspaceMode === 'reuse' && submittedFingerprint.current !== fingerprint) {
         const state = client.getQueryState<InfiniteData<Page<Workspace>>>(
           storageKeys.list(groupId),
@@ -127,116 +98,154 @@ function CreateNotebookForm({ groupId, canSubmit }: { groupId: string; canSubmit
     onSuccess: (operation) => {
       void client.invalidateQueries({ queryKey: notebookKeys.all(groupId) });
       void client.invalidateQueries({ queryKey: storageKeys.all(groupId) });
-      if (!mounted.current) return;
-      void navigate(`/g/${groupId}/notebooks`, {
-        replace: true,
-        state: { operationId: operation.operationId },
-      });
+      if (mounted.current)
+        void navigate(`/workspaces/${groupId}/notebooks`, {
+          replace: true,
+          state: { operationId: operation.operationId },
+        });
     },
   });
+  const blocker = useUnsavedChangesBlocker(
+    form.formState.isDirty && !mutation.isPending && !mutation.isSuccess,
+  );
+  const confirming = blocker.state === 'blocked';
+  useEffect(() => {
+    if (confirming) continueButton.current?.focus();
+    else if (wasConfirming.current) cancelButton.current?.focus();
+    wasConfirming.current = confirming;
+  }, [confirming]);
+  const denied =
+    permissions.error instanceof ApiError && [401, 403].includes(permissions.error.status);
+  const hasPermission = !denied && !!permissions.data?.permissions.includes('notebook.create');
+  const enabled =
+    hasPermission &&
+    permissions.can('notebook.create') &&
+    group.status === 'ACTIVE' &&
+    images.isSuccess &&
+    !!images.data.items.length;
+  const close = () => {
+    if (mutation.isPending) return;
+    if (blocker.state === 'blocked') {
+      blocker.reset();
+      return;
+    }
+    void navigate(`/workspaces/${groupId}/notebooks`, { replace: true });
+  };
   return (
-    <div className="stack spacious">
-      <UnsavedChangesGuard
-        when={form.formState.isDirty && !mutation.isPending && !mutation.isSuccess}
-      />
-      <Link className="text-link" to={`/g/${groupId}/notebooks`}>
-        ← 返回开发环境
-      </Link>
-      <PageHeading
-        eyebrow="NEW ENVIRONMENT"
-        title="新建开发环境"
-        description="选择受管镜像和计算规格，提交后由平台异步创建并启动。"
-      />
-      {group.status !== 'ACTIVE' && (
-        <Alert color="warning" title="空间尚不可用">
-          请等待空间恢复后再创建环境。
+    <Modal
+      open
+      size="lg"
+      className="resource-create-dialog"
+      title={confirming ? '放弃未提交的开发环境？' : '新建开发环境'}
+      description={
+        confirming
+          ? '当前填写内容尚未提交，离开后将丢弃。'
+          : '选择受管镜像、计算规格与工作目录，提交后由平台异步创建并启动。'
+      }
+      closeButton={!mutation.isPending}
+      onClose={close}
+      actions={
+        confirming ? (
+          <>
+            <Button
+              ref={continueButton}
+              hierarchy="outline"
+              onClick={() => {
+                if (blocker.state === 'blocked') blocker.reset();
+              }}
+            >
+              继续填写
+            </Button>
+            <Button
+              hierarchy="primary"
+              onClick={() => {
+                if (blocker.state === 'blocked') blocker.proceed();
+              }}
+            >
+              放弃并离开
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              ref={cancelButton}
+              hierarchy="outline"
+              disabled={mutation.isPending}
+              onClick={close}
+            >
+              取消
+            </Button>
+            {hasPermission && (
+              <Button
+                hierarchy="primary"
+                type="submit"
+                form={formId}
+                loading={mutation.isPending}
+                disabled={!enabled || mutation.isSuccess}
+              >
+                创建并启动
+              </Button>
+            )}
+          </>
+        )
+      }
+    >
+      {confirming && (
+        <Alert color="warning" title="将丢弃本地填写内容">
+          继续填写可保留当前输入。离开不会撤销已发出的请求；若提交曾遇到网络异常，请返回列表核对结果。
         </Alert>
       )}
-      <Card>
-        <FormProvider {...form}>
-          <form
-            className="stack spacious"
-            onSubmit={handleSubmit((values) => {
-              if (!mutation.isPending) mutation.mutate(values);
-            })}
-          >
-            <fieldset className="form-section" disabled={mutation.isPending}>
-              <legend>环境与镜像</legend>
-              <Input
-                label="实例名称"
-                hint="最长 63 字符，小写字母、数字和连字符；创建后不可修改"
-                {...register('name')}
-                error={errors.name?.message}
-              />
-              {images.isPending ? (
-                <Loading label="正在读取受管镜像" />
-              ) : images.isError ? (
+      <div hidden={confirming}>
+        {!permissions.data && permissions.isPending ? (
+          <Loading label="正在获取空间权限" />
+        ) : permissions.isError && !permissions.data ? (
+          <ErrorState
+            error={permissions.error}
+            retry={() => {
+              void permissions.refetch();
+            }}
+          />
+        ) : !hasPermission ? (
+          <NoData title="没有创建开发环境的权限" description="请联系空间负责人分配权限。" />
+        ) : (
+          <FormProvider {...form}>
+            <form
+              id={formId}
+              className="stack spacious"
+              onSubmit={form.handleSubmit((values) => {
+                if (!mutation.isPending && !mutation.isSuccess) mutation.mutate(values);
+              })}
+            >
+              {permissions.isError && (
                 <ErrorState
-                  error={images.error}
+                  error={permissions.error}
                   retry={() => {
-                    void images.refetch();
+                    void permissions.refetch();
                   }}
                 />
-              ) : images.data.items.length === 0 ? (
-                <NoData title="暂无可用镜像" description="请联系管理员配置镜像目录。" />
-              ) : (
-                <Controller
-                  control={control}
-                  name="imageId"
-                  render={({ field }) => (
-                    <Select
-                      label="运行镜像"
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="请选择镜像"
-                      error={errors.imageId?.message}
-                      options={images.data.items.map((image) => ({
-                        value: image.id,
-                        label: `${image.name} · ${image.category}`,
-                      }))}
-                    />
-                  )}
-                />
               )}
-            </fieldset>
-            <fieldset className="form-fields" disabled={mutation.isPending}>
-              <NotebookSettingsFields />
-              <NotebookWorkspaceFields
+              {group.status !== 'ACTIVE' && (
+                <Alert color="warning" title="空间尚不可用">
+                  可查看当前表单，空间恢复可用后才能提交创建。
+                </Alert>
+              )}
+              <NotebookCreateFields
                 groupId={groupId}
                 userId={permissions.data?.userId}
                 allowReuse={
                   permissions.can('workspace.read') && permissions.can('workspace.attach')
                 }
+                disabled={mutation.isPending || mutation.isSuccess}
+                images={images}
               />
-            </fieldset>
-            {mutation.isError && <ErrorState error={mutation.error} />}
-            <div className="actions end">
-              <Button
-                hierarchy="outline"
-                disabled={mutation.isPending}
-                onClick={() => {
-                  void navigate(`/g/${groupId}/notebooks`);
-                }}
-              >
-                取消
-              </Button>
-              <Button
-                hierarchy="primary"
-                type="submit"
-                loading={mutation.isPending}
-                disabled={
-                  !canSubmit ||
-                  group.status !== 'ACTIVE' ||
-                  !images.isSuccess ||
-                  images.data.items.length === 0
-                }
-              >
-                创建并启动
-              </Button>
-            </div>
-          </form>
-        </FormProvider>
-      </Card>
-    </div>
+              {mutation.isError && <ErrorState error={mutation.error} />}
+              <p className="small muted">
+                请求受理不代表环境已就绪，创建后可在列表查看操作进度。删除环境默认保留工作目录。
+              </p>
+            </form>
+          </FormProvider>
+        )}
+      </div>
+    </Modal>
   );
 }

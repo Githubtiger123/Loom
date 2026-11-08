@@ -1,37 +1,61 @@
-import { Link, NavLink, Outlet, useSearchParams } from 'react-router-dom';
-import { Alert } from '@atomus';
+import { Link, Outlet, useLocation, useSearchParams } from 'react-router-dom';
+import { Alert, Card } from '@atomus';
+import { LayoutDashboard, ShieldCheck, Users, UserPlus, KeyRound, ScrollText } from 'lucide-react';
 import { useGlobalPermissions } from '@/lib/use-global-permissions';
 import { ErrorState, Loading, NoData, PageHeading } from '@/components/feedback';
 import { useOperationNavigation } from '@/lib/use-operation-navigation';
 import { OperationDialog } from '@/components/operation-dialog';
-import { AccountLinks } from '@/components/account-links';
+import { AppFrame } from '@/app/app-frame';
 import { adminSections } from './policy';
 import { validId } from './form-schema';
 export function AdminLayout() {
   const me = useGlobalPermissions();
+  const { pathname } = useLocation();
   const { operation, setOperation } = useOperationNavigation();
+  const currentPath = pathname.replace(/\/+$/, '');
+  const section =
+    adminSections.find((s) => currentPath === s.path) ??
+    [...adminSections].reverse().find((s) => currentPath.startsWith(`${s.path}/`));
+  const icons = {
+    'user.read': Users,
+    'user.manage': UserPlus,
+    'role.manage': KeyRound,
+    'audit.read': ScrollText,
+  };
   return (
-    <main className="management-layout stack spacious">
-      <div className="list-meta">
-        <Link className="wordmark" to="/">
-          <span className="logo-mark">L</span>loom <span className="small muted">平台管理</span>
-        </Link>
-        <AccountLinks />
-      </div>
-      <nav className="management-nav" aria-label="平台管理导航">
-        {adminSections
+    <AppFrame
+      context={{
+        label: '管理范围',
+        title: '平台管理',
+        icon: <ShieldCheck size={18} />,
+        backLabel: '返回工作空间',
+      }}
+      caption="ADMINISTRATION"
+      navigationPending={me.isPending}
+      items={[
+        { to: '/admin', label: '管理概览', icon: LayoutDashboard, end: true },
+        ...adminSections
           .filter((s) => me.can(s.permission))
-          .map((s) => (
-            <NavLink key={s.path} to={s.path} end={s.path === '/admin/users'}>
-              {s.label}
-            </NavLink>
-          ))}
-      </nav>
+          .map((s) => ({
+            to: s.path,
+            label: s.label,
+            icon: icons[s.permission as keyof typeof icons],
+            active: section?.path === s.path,
+          })),
+      ]}
+      breadcrumb={
+        <>
+          <Link to="/admin">平台管理</Link>
+          <span>/</span>
+          <strong>{section?.label ?? '管理概览'}</strong>
+        </>
+      }
+    >
       <Outlet />
       {operation && (
         <OperationDialog id={operation} groupId="" onClose={() => setOperation(undefined)} />
       )}
-    </main>
+    </AppFrame>
   );
 }
 export function AdminIndex() {
@@ -61,10 +85,13 @@ export function AdminIndex() {
         title="平台管理"
         description="用户生命周期、授权定义和安全审计；管理操作始终由后端逐请求授权。"
       />
-      <div className="management-nav">
+      <div className="module-grid">
         {sections.map((section) => (
-          <Link key={section.path} to={section.path}>
-            {section.label}
+          <Link key={section.path} className="management-entry" to={section.path}>
+            <Card>
+              <h2>{section.label}</h2>
+              <p className="small muted">进入管理 →</p>
+            </Card>
           </Link>
         ))}
       </div>

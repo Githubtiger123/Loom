@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { Button, Modal } from '@atomus';
 import { clearSession, trustedHeaderMode } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -17,13 +16,10 @@ export function SessionsPage() {
     },
   });
   return (
-    <main className="management-layout stack spacious">
-      <Link className="text-link" to="/">
-        ← 返回工作空间
-      </Link>
+    <div className="stack spacious">
       <PageHeading
         eyebrow="ACCOUNT SECURITY"
-        title="我的登录会话"
+        title="设备会话"
         description="管理本地认证的登录设备，不管理外部 SSO 提供方的会话。"
         actions={
           !trustedHeaderMode ? (
@@ -39,16 +35,12 @@ export function SessionsPage() {
           description="请到身份提供方管理登录设备，本平台不伪造其会话状态。"
         />
       ) : (
-        <>
-          <Link className="text-link" to="/password">
-            修改密码
-          </Link>
-          <SessionPanel />
-        </>
+        <SessionPanel />
       )}
       {all && (
         <Modal
           open
+          closeButton={!mutation.isPending}
           title="退出全部设备？"
           type="destructive"
           description="包括当前设备。所有旧会话会失效，你需要重新登录。"
@@ -79,6 +71,6 @@ export function SessionsPage() {
           {mutation.isError && <ErrorState error={mutation.error} />}
         </Modal>
       )}
-    </main>
+    </div>
   );
 }

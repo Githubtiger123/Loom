@@ -100,7 +100,7 @@ function WorkspaceDetailContent({
   };
   return (
     <div className="stack spacious">
-      <Link className="text-link" to={`/g/${groupId}/storage`}>
+      <Link className="text-link" to={`/workspaces/${groupId}/storage`}>
         ← 返回工作目录
       </Link>
       <PageHeading
@@ -119,7 +119,7 @@ function WorkspaceDetailContent({
           </Button>
         )}
         {can('workspace.transfer') && readyWorkspace(row) && group.status === 'ACTIVE' && (
-          <Link className="text-link" to={`/g/${groupId}/storage/${row.id}/transfer`}>
+          <Link className="text-link" to={`/workspaces/${groupId}/storage/${row.id}/transfer`}>
             交接数据负责人
           </Link>
         )}

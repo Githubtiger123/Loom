@@ -3,6 +3,8 @@
 当前进度：已补充认证会话管理、空间生命周期、配额预算、独立工作目录、Notebook 执行与诊断，以及 Pipeline / Trainer / KServe 业务 API。Pipeline 已接官方 KFP v2 主线；KServe 已接内置 `kserve-worker`，结构化生成和管理 `InferenceService`，并用 Watch + 周期修复同步状态。仅交付后端源码，不包含前端、实际网关部署及 Trainer 实际适配器。
 按用户要求不新增测试、不测试、不编译、不运行项目或迁移。当前改动仅做源码与文档级核对，不代表真实 MySQL、身份网关或 Kubernetes 集成已经验证。
 
+集群首次安装入口见 [install/README.md](../install/README.md)：固定版本的 Profile/Notebook 控制器、Istio、cert-manager，以及可选 KFP/KServe。脚本与配置已提供但未执行，不代替 Loom 业务库初始化、应用镜像部署及访问链路核验。
+
 Pipeline 后端新增 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行 IR 快照 + KFP 状态 + MLMD 参数/产物元数据；不包含前端或产物可视化。
 
 前端操作入口可使用 [当前用户空间权限快照](docs/group-permissions.md)，不从全局权限推导组内权限；快照不替代各业务接口授权。

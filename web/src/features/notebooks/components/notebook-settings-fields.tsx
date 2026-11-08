@@ -3,7 +3,13 @@ import { Input, Select } from '@atomus';
 import { FormTextarea } from '@/components/form-textarea';
 import type { NotebookSettingsValues } from '../form-schema';
 
-export function NotebookSettingsFields({ runtimeLocked = false }: { runtimeLocked?: boolean }) {
+export function NotebookSettingsFields({
+  runtimeLocked = false,
+  disabled = false,
+}: {
+  runtimeLocked?: boolean;
+  disabled?: boolean;
+}) {
   const {
     register,
     control,
@@ -52,7 +58,7 @@ export function NotebookSettingsFields({ runtimeLocked = false }: { runtimeLocke
                 label="GPU 卡数"
                 value={field.value}
                 onChange={field.onChange}
-                disabled={runtimeLocked}
+                disabled={disabled || runtimeLocked}
                 error={errors.gpu?.message}
                 options={['0', '1', '2', '4'].map((value) => ({ value, label: `${value} 张` }))}
               />
@@ -64,6 +70,7 @@ export function NotebookSettingsFields({ runtimeLocked = false }: { runtimeLocke
             render={({ field }) => (
               <Select
                 label="空闲自动停止"
+                disabled={disabled}
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.idleStopMinutes?.message}
