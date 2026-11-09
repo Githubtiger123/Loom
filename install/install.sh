@@ -23,7 +23,7 @@ ENABLE_POD_EXEC="${ENABLE_POD_EXEC:-false}"
 ENABLE_SPACE_DELETE="${ENABLE_SPACE_DELETE:-false}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-600s}"
 # 镜像地址与版本统一维护在 manifests/registry/kustomization.yaml。
-# 当前配置使用公开毫秒镜像，不读取 Docker 登录文件、不创建仓库凭据 Secret。
+# 当前配置使用公开镜像代理（mc 为华为云），不读取 Docker 登录文件、不创建仓库凭据 Secret。
 
 if [[ -z "$KUBE_CONTEXT" ]]; then
   echo '用法：bash install.sh <kubectl-context>' >&2

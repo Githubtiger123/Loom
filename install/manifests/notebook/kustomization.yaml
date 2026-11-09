@@ -6,6 +6,7 @@ components:
   - ../registry
 configMapGenerator:
   - name: notebook-controller-config
+    namespace: kubeflow
     behavior: merge
     envs: [params.env]
 patches:

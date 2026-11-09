@@ -74,7 +74,7 @@ INSTALL_TRAINER=true bash install.sh YOUR_KUBECTL_CONTEXT
 
 ### 毫秒镜像与来源核验
 
-根据用户分两次贴出的实际拉取结果，**19 个安装期镜像均已改为对应的毫秒镜像地址**，tag 保持不变，集中维护在 [registry/kustomization.yaml](manifests/registry/kustomization.yaml)。Profile、Notebook、KFP、MinIO、KServe 和 Trainer 的安装入口共用这一份映射，直接执行对应的 `kubectl apply -k` 即生效。原始上游配置保留来源地址，Loom 外层负责映射。
+根据用户分两次贴出的实际拉取结果，19 个安装期镜像最初映射到毫秒镜像；mc 后续按用户指定改为华为云地址，tag 保持不变，集中维护在 [registry/kustomization.yaml](manifests/registry/kustomization.yaml)。Profile、Notebook、KFP、MinIO、KServe 和 Trainer 的安装入口共用这一份映射。mc 初始化 Job 和 Profile hook 的直接引用也同步更新。原始上游配置保留来源地址，Loom 外层负责映射。
 
 成功项按原路径分别使用 `ghcr.1ms.run`、`gcr.1ms.run`、`quay.1ms.run` 和 `k8s.1ms.run`，版本 tag 不变。ML Metadata 使用实测成功的 `gcr.1ms.run/tfx-oss-public/ml_metadata_store_server:1.14.0`，保留原始下划线名称。
 
@@ -84,9 +84,11 @@ INSTALL_TRAINER=true bash install.sh YOUR_KUBECTL_CONTEXT
 |---|---|
 | Metacontroller | ghcr.1ms.run/metacontroller/metacontroller:v4.17.6 |
 | MinIO | ghcr.1ms.run/netvark/minio:RELEASE.2025-09-07T16-13-09Z |
-| mc | ghcr.1ms.run/netvark/mc:RELEASE.2025-08-13T08-35-41Z |
+| mc | swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/minio/mc:RELEASE.2025-08-13T08-35-41Z |
 
-**MinIO/mc 的 netvark 是第三方来源，不是原 minio 组织的同路径镜像。** 用户已确认能够拉取，但没有核验其构建、二进制内容、架构、漏洞或与官方版本的等价性；同名 tag 不能证明内容一致。Metacontroller 也没有在未核验的情况下复用上游 digest，生产应先核验来源，再将实际镜像摘要锁定到受控仓库。本次仅替换地址，不因此升级 MinIO 版本。
+**MinIO 的 netvark 是第三方来源，不是原 minio 组织的同路径镜像。** mc 当前使用华为云 `ddn-k8s/docker.io/minio/mc` 镜像代理，版本为 `RELEASE.2025-08-13T08-35-41Z`，不是误贴的 `Z1Z`，尚未验证该地址完整拉取或内容等价性。旧毫秒 mc 地址曾在服务器下载镜像层时 TLS 超时，本次不再使用。用户本地拉取结果不能代替服务器验证，同名 tag 也不能证明内容一致。Metacontroller 没有在未核验的情况下复用上游 digest，生产应先核验来源，再将实际镜像摘要锁定到受控仓库。本次仅替换 mc 地址，不升级版本。
+
+初始化 Job 仍名为 `loom-minio-bootstrap-v4`；集群已有旧 Job 时，因 Pod 模板不可变，必须在确认旧初始化任务已停止后删除并重建该 Job，不能只 apply 新镜像。删除该 Job 不删除 MinIO StatefulSet 或 PVC；本次未执行任何集群操作。
 
 另外，KFP 运行任务所用的 driver/launcher 已按用户指定改为 DaoCloud 地址，版本保持 `2.18.0`：
 

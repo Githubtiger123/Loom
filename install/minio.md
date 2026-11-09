@@ -14,7 +14,7 @@ INSTALL_PIPELINE=true bash install.sh YOUR_KUBECTL_CONTEXT
 ```
 
 - `manifests/minio/minio.yaml`：单副本 StatefulSet、50Gi 默认 StorageClass PVC、ClusterIP S3 9000；不暴露控制台或外部入口，不配置匿名桶。
-- `manifests/minio/bootstrap/`：mc Job 创建 mlpipeline 桶、KFP 后端、日志和可视化产物只读账号。不删对象、不覆盖桶策略、不主动配置过期删除。当前 Job 为 `loom-minio-bootstrap-v4`，使用用户实测可拉取的 netvark 毫秒镜像，不依赖阿里云拉取 Secret，避免覆盖旧版不可变 Job 模板；旧 Job 不自动删除。
+- `manifests/minio/bootstrap/`：mc Job 创建 mlpipeline 桶、KFP 后端、日志和可视化产物只读账号。不删对象、不覆盖桶策略、不主动配置过期删除。当前 Job 为 `loom-minio-bootstrap-v4`，mc 使用用户指定的华为云镜像，不依赖阿里云拉取 Secret。已有同名旧 Job 时须确认任务停止后删除并重建，不能直接更新不可变 Pod 模板；脚本不自动删除旧 Job。
 - `manifests/pipeline/base/minio-kfp.yaml`：KFP API/UI 地址和全局 Argo 日志仓库。
 - `manifests/pipeline/base/minio-profile-controller.yaml`、`minio-profile-sync.py`：替换 SeaweedFS 专用空间凭据配置，生成空间级 Secret、launcher providers、Argo 仓库和 MLMD 配置。
 - `manifests/pipeline/base/kustomization.yaml`：排除上游 SeaweedFS 工作负载、PVC、Service 与策略；不使用 prune，也不删除集群中已有资源。
@@ -22,7 +22,7 @@ INSTALL_PIPELINE=true bash install.sh YOUR_KUBECTL_CONTEXT
 
 `minio-profile-sync.py` 是运行在官方 KFP profile-controller Pod 内的 Python 3 webhook，不是安装器。mc 通过固定镜像的 init container 提供；不要求用户手工执行 Python，不重新实现 KFP 调度。
 
-MinIO/mc 地址与版本统一由 `manifests/registry/kustomization.yaml` 映射到 `ghcr.1ms.run/netvark/minio` 和 `ghcr.1ms.run/netvark/mc`；KFP hook 的 mc 补丁也使用同一目标地址。当前公开镜像不要求 Docker 登录或阿里云 imagePullSecret，不需要把镜像 tag 回 quay.io 或导入 containerd。netvark 为第三方来源，用户成功拉取不代表已验证镜像内容、官方等价性或真实运行兼容性，生产前需核验。MySQL/MinIO 的业务 Secret 仍须按下文配置。
+MinIO/mc 地址与版本由 `manifests/registry/kustomization.yaml` 维护。MinIO 仍映射到 `ghcr.1ms.run/netvark/minio`；mc 改为 `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/minio/mc:RELEASE.2025-08-13T08-35-41Z`，初始化 Job 和 KFP hook 的直接引用也使用此地址。当前公开镜像不要求 Docker 登录或阿里云 imagePullSecret，不需要把镜像 tag 回 quay.io。netvark 为第三方来源，华为云地址也尚未验证完整拉取、内容等价性或真实运行兼容性，生产前需核验。MySQL/MinIO 的业务 Secret 仍须按下文配置。
 
 ## 账号边界
 

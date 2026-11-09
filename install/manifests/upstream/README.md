@@ -12,6 +12,6 @@
 
 此目录是部署所需依赖，上传到 Linux 时需与整个 `install/manifests` 一起上传。不能只上传顶层 `kustomization.yaml` 或只上传某个组件目录。不要使用 `kubectl apply -R -f manifests` 安装此树，必须逐个组件执行 `kubectl apply --server-side -k manifests/<组件入口>`，让 Loom 的覆盖、删除和安全补丁生效。
 
-这是本地配置与在线代理资源组合，不是全离线包。外层 `registry` 将用户已成功拉取的 19 个控制面镜像映射到对应 `1ms.run` 地址；其中 MinIO/mc 使用 `ghcr.1ms.run/netvark/` 的第三方来源，尚未核验内容与官方等价性。当前不再引用私有仓库凭据组件，不要求阿里云登录。Docker Hub 和业务运行时镜像未统一迁移，不能把 GitHub 文件下载代理前缀套到镜像地址上。
+这是本地配置与在线代理资源组合，不是全离线包。外层 `registry` 维护 19 个控制面镜像映射：mc 后续按用户指定改为华为云 `swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/minio/mc:RELEASE.2025-08-13T08-35-41Z`，其余保留对应 `1ms.run` 地址。MinIO 仍为 netvark 第三方来源；mc 的新地址尚未验证拉取，均未核验内容与官方等价性。当前不再引用私有仓库凭据组件，不要求阿里云登录。Docker Hub 和业务运行时镜像未统一迁移，不能把 GitHub 文件下载代理前缀套到镜像地址上。
 
 升级时应从新版本重新审阅配置、补丁和资源列表，不能只替换 URL 里的版本号。按项目要求，本轮仅整理源码和配置，未运行 Kustomize 渲染、测试、编译、安装或集群操作。

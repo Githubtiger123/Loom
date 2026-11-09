@@ -267,6 +267,11 @@ func (c *Client) clusterBindingMayGrant(ctx context.Context, binding rbacv1.Clus
 		return false, err
 	}
 	for _, rule := range role.Rules {
+		// Trainer 的公共集群运行时目录不是空间工作负载授权。
+		// 逐条检查实际规则，不信任绑定名称，也不放行同一角色中的其他权限。
+		if isTrainingRuntimeReadOnlyRule(rule) {
+			continue
+		}
 		for _, res := range rule.Resources {
 			// 所有人默认具有的 API discovery 和自我权限查询不是空间工作负载授权。
 			if res != "selfsubjectreviews" && res != "selfsubjectaccessreviews" && res != "selfsubjectrulesreviews" {
@@ -275,6 +280,22 @@ func (c *Client) clusterBindingMayGrant(ctx context.Context, binding rbacv1.Clus
 		}
 	}
 	return false, nil
+}
+
+func isTrainingRuntimeReadOnlyRule(rule rbacv1.PolicyRule) bool {
+	if len(rule.APIGroups) != 1 || rule.APIGroups[0] != "trainer.kubeflow.org" ||
+		len(rule.Resources) != 1 || rule.Resources[0] != "clustertrainingruntimes" ||
+		len(rule.NonResourceURLs) != 0 || len(rule.Verbs) == 0 {
+		return false
+	}
+	for _, verb := range rule.Verbs {
+		switch verb {
+		case "get", "list", "watch":
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Client) listClusterRoleBindings(ctx context.Context) ([]rbacv1.ClusterRoleBinding, error) {
