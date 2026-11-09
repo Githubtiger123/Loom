@@ -7,6 +7,7 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/apperr"
 	"github.com/githubtiger123/loom/platform/internal/config"
 	"github.com/githubtiger123/loom/platform/internal/dto"
+	"github.com/githubtiger123/loom/platform/internal/infra/artifactstore"
 	"github.com/githubtiger123/loom/platform/internal/infra/kfp"
 	"github.com/githubtiger123/loom/platform/internal/infra/logarchive"
 	"github.com/githubtiger123/loom/platform/internal/infra/mlmd"
@@ -51,6 +52,18 @@ func configureLogArchive(base *service.Service, cfg config.LogArchive) error {
 		return err
 	}
 	base.PipelineLogArchivesReader = reader
+	return nil
+}
+
+func configureArtifactStore(base *service.Service, cfg config.ArtifactStore) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	reader, err := artifactstore.New(cfg)
+	if err != nil {
+		return err
+	}
+	base.PipelineArtifacts = reader
 	return nil
 }
 

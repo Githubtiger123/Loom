@@ -1,0 +1,15 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../../../../../../argo-workflows/manifests/base/crds/minimal
+  - ../../../../../../../../argo-workflows/manifests/cluster-install-no-crds/workflow-controller-rbac
+  - ../../base
+patches:
+  - path: workflow-controller-clusterrolebinding-patch.json
+    target:
+      group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+      name: argo-binding
+      version: v1

@@ -2,7 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: kubeflow
 resources:
-  - https://github.com/kubeflow/community-distribution/applications/dashboard/upstream/profile-controller/base?ref=96e316a80e257a9f645c7c1ee0e1a94b904dead7
+  - ../upstream/community-distribution/applications/dashboard/upstream/profile-controller/base
+components:
+  - ../registry
 patches:
   - patch: |-
       $patch: delete

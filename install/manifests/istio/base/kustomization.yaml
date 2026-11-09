@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/kubeflow/community-distribution/common/istio/istio-install/base?ref=96e316a80e257a9f645c7c1ee0e1a94b904dead7
+  - upstream
 patches:
   # 不沿用官方的通配 HTTP Gateway，也不匿名放行 ingress。
   - patch: |-

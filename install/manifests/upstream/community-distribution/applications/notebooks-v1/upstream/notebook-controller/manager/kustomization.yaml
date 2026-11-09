@@ -1,0 +1,10 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+resources:
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/manager/manager.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/manager/service-account.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/manager/service.yaml
+configMapGenerator:
+  - name: config
+    envs:
+      - params.env

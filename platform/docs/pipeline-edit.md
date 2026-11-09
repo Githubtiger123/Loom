@@ -60,7 +60,7 @@ API 保留业务 rid 和名称，生成全新的 instanceId，清空旧外部 ID
 
 ## 安全边界
 
-旧实例日志可用 attempts 的 instanceId 请求 [MinIO 离线日志接口](log-archives.md)，不依赖已删除的 KFP Run/Pod，不新增数据库日志索引。前提是采集端在清理前已上传日志和 manifest；当前编辑清理不等待归档完成，旧 attempts 仅保留业务身份和规格，不代表日志已归档。
+旧实例日志可用 attempts 的 instanceId 请求 [MinIO 离线日志接口](log-archives.md)，不依赖已删除的 KFP Run/Pod，不新增数据库日志索引。argo 模式要求清理前 Argo 已成功归档，manifest 模式要求采集端上传清单；当前编辑清理不等待归档完成，旧 attempts 仅保留业务身份和规格，不代表日志已归档。
 
 执行命令与独立观测沿用实例/revision/租约/目标锁隔离。新实例启动后，旧实例的晚到回填不能覆盖新配置。编辑新配置以 pendingSpec 暂存，清理仍依据旧快照；不会用新配置摘要去匹配旧 KFP Run。只有确认外部删除的 STOPPED 观测才能完成编辑，普通终态/停止回执不足以完成。
 

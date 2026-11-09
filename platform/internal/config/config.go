@@ -21,20 +21,21 @@ import (
 
 // Config 是平台配置的根结构。
 type Config struct {
-	Server     Server     `yaml:"server"`
-	DB         DB         `yaml:"db"`
-	Redis      Redis      `yaml:"redis"`
-	MQ         MQ         `yaml:"mq"`
-	K8s        K8s        `yaml:"k8s"`
-	Istio      Istio      `yaml:"istio"`
-	Identity   Identity   `yaml:"identity"`
-	Auth       Auth       `yaml:"auth"`
-	Executor   Executor   `yaml:"executor"`
-	Images     Images     `yaml:"images"`
-	Pipeline   Pipeline   `yaml:"pipeline"`
-	KServe     KServe     `yaml:"kserve"`
-	Log        Log        `yaml:"log"`
-	LogArchive LogArchive `yaml:"log_archive"`
+	Server        Server        `yaml:"server"`
+	DB            DB            `yaml:"db"`
+	Redis         Redis         `yaml:"redis"`
+	MQ            MQ            `yaml:"mq"`
+	K8s           K8s           `yaml:"k8s"`
+	Istio         Istio         `yaml:"istio"`
+	Identity      Identity      `yaml:"identity"`
+	Auth          Auth          `yaml:"auth"`
+	Executor      Executor      `yaml:"executor"`
+	Images        Images        `yaml:"images"`
+	Pipeline      Pipeline      `yaml:"pipeline"`
+	KServe        KServe        `yaml:"kserve"`
+	Log           Log           `yaml:"log"`
+	LogArchive    LogArchive    `yaml:"log_archive"`
+	ArtifactStore ArtifactStore `yaml:"artifact_store"`
 }
 
 // Server 是 HTTP 服务参数。
@@ -196,8 +197,9 @@ func Default() *Config {
 			SyncInterval: Duration(5 * time.Second), TerminalSyncInterval: Duration(5 * time.Minute), SyncConcurrency: 2, SyncQPS: 10},
 		KServe: KServe{ServiceAccount: "default-editor", DeploymentMode: "Standard", PollInterval: Duration(10 * time.Second),
 			ResyncInterval: Duration(5 * time.Minute), SyncConcurrency: 2, SyncQPS: 10},
-		Log:        Log{Level: "info"},
-		LogArchive: LogArchive{Prefix: "logs", Region: "us-east-1", Timeout: Duration(15 * time.Second)},
+		Log:           Log{Level: "info"},
+		LogArchive:    LogArchive{Prefix: "logs", Region: "us-east-1", Timeout: Duration(15 * time.Second)},
+		ArtifactStore: defaultArtifactStore(),
 	}
 }
 
@@ -336,6 +338,7 @@ func applyEnv(c *Config) {
 	envDuration(&c.Auth.SessionTTL, "LOOM_AUTH_SESSION_TTL")
 	envStr(&c.Log.Level, "LOOM_LOG_LEVEL")
 	envBool(&c.LogArchive.Enabled, "LOOM_LOG_ARCHIVE_ENABLED")
+	envStr(&c.LogArchive.Format, "LOOM_LOG_ARCHIVE_FORMAT")
 	envStr(&c.LogArchive.Endpoint, "LOOM_LOG_ARCHIVE_ENDPOINT")
 	envStr(&c.LogArchive.Bucket, "LOOM_LOG_ARCHIVE_BUCKET")
 	envStr(&c.LogArchive.Prefix, "LOOM_LOG_ARCHIVE_PREFIX")
@@ -344,6 +347,15 @@ func applyEnv(c *Config) {
 	envStr(&c.LogArchive.SecretKey, "LOOM_LOG_ARCHIVE_SECRET_KEY")
 	envStr(&c.LogArchive.SessionToken, "LOOM_LOG_ARCHIVE_SESSION_TOKEN")
 	envDuration(&c.LogArchive.Timeout, "LOOM_LOG_ARCHIVE_TIMEOUT")
+	envBool(&c.ArtifactStore.Enabled, "LOOM_ARTIFACT_STORE_ENABLED")
+	envStr(&c.ArtifactStore.Endpoint, "LOOM_ARTIFACT_STORE_ENDPOINT")
+	envStr(&c.ArtifactStore.Bucket, "LOOM_ARTIFACT_STORE_BUCKET")
+	envStr(&c.ArtifactStore.Prefix, "LOOM_ARTIFACT_STORE_PREFIX")
+	envStr(&c.ArtifactStore.Region, "LOOM_ARTIFACT_STORE_REGION")
+	envStr(&c.ArtifactStore.AccessKey, "LOOM_ARTIFACT_STORE_ACCESS_KEY")
+	envStr(&c.ArtifactStore.SecretKey, "LOOM_ARTIFACT_STORE_SECRET_KEY")
+	envStr(&c.ArtifactStore.SessionToken, "LOOM_ARTIFACT_STORE_SESSION_TOKEN")
+	envDuration(&c.ArtifactStore.Timeout, "LOOM_ARTIFACT_STORE_TIMEOUT")
 }
 
 func envStr(dst *string, key string) {

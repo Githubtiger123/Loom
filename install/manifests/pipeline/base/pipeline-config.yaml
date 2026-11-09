@@ -6,7 +6,11 @@ metadata:
 data:
   USERID_HEADER: kubeflow-userid
   USERID_PREFIX: ""
+  bucketName: mlpipeline
+  ARTIFACTS_PROXY_ENABLED: "false"
+  # 使用用户指定的镜像站 tag；未核验摘要，不沿用 mirror.gcr.io 的旧 digest。
+  cacheImage: docker.1ms.run/library/alpine:3.23.7
   defaultSecurityContextRunAsUser: ""
   defaultSecurityContextRunAsGroup: ""
   defaultSecurityContextRunAsNonRoot: ""
-# 上游锁定快照已配置 archiveLogs: true，保留其 S3/keyFormat。
+# Argo 和空间级仓库都由 MinIO 补丁指定 archiveLogs 与执行 UUID 目录。

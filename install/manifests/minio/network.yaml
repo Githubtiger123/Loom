@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: minio
+spec:
+  podSelector:
+    matchLabels: {app: minio}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              pipelines.kubeflow.org/enabled: "true"
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loom-system
+          podSelector:
+            matchLabels: {app: loom-api}
+      ports:
+        - protocol: TCP
+          port: 9000
+---
+# MinIO 自行校验 S3 签名；服务不注入 sidecar，兼容不带 mesh 的 Argo Pod。
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: minio
+spec:
+  host: minio.kubeflow.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: DISABLE

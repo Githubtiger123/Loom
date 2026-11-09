@@ -1,0 +1,21 @@
+# Preserve the official base's resources, patches and image mapping at the locked
+# commit. install.yaml is local to adapt BusyBox inside the injection template.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - install.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-install/base/gateway_authorizationpolicy.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-install/base/deny_all_authorizationpolicy.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-install/base/gateway.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-install/base/sidecar-prune-egress.yaml
+patches:
+  - path: patches/service.yaml
+  - path: patches/istio-configmap-disable-tracing.yaml
+  - path: patches/istio-sidecar-injector-patch.yaml
+  - path: patches/disable-debugging.yaml
+  - path: patches/seccomp-istio-ingressgateway.yaml
+  - path: patches/seccomp-istiod.yaml
+images:
+  - name: busybox
+    newName: ghcr.1ms.run/containerd/busybox
+    newTag: "1.28"

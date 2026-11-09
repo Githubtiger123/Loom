@@ -147,6 +147,9 @@ func (c *Config) Validate() error {
 	if err := c.LogArchive.Validate(); err != nil {
 		return err
 	}
+	if err := c.ArtifactStore.Validate(); err != nil {
+		return err
+	}
 	return c.validateAuth()
 }
 

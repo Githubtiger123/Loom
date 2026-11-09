@@ -1,0 +1,65 @@
+# Loom 控制面镜像映射；19 个均使用用户已拉取成功的毫秒镜像地址。
+# 不修改上游版本，不映射 Docker Hub、Notebook 镜像或训练/推理工作负载镜像。
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+images:
+  - name: ghcr.io/kubeflow/dashboard/profile-controller
+    newName: ghcr.1ms.run/kubeflow/dashboard/profile-controller
+    newTag: v2.0.1
+  - name: ghcr.io/kubeflow/notebooks/notebook-controller
+    newName: ghcr.1ms.run/kubeflow/notebooks/notebook-controller
+    newTag: v1.11.1
+  - name: ghcr.io/kubeflow/kfp-api-server
+    newName: ghcr.1ms.run/kubeflow/kfp-api-server
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-cache-server
+    newName: ghcr.1ms.run/kubeflow/kfp-cache-server
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-frontend
+    newName: ghcr.1ms.run/kubeflow/kfp-frontend
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-persistence-agent
+    newName: ghcr.1ms.run/kubeflow/kfp-persistence-agent
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-scheduled-workflow-controller
+    newName: ghcr.1ms.run/kubeflow/kfp-scheduled-workflow-controller
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-viewer-crd-controller
+    newName: ghcr.1ms.run/kubeflow/kfp-viewer-crd-controller
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-visualization-server
+    newName: ghcr.1ms.run/kubeflow/kfp-visualization-server
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-metadata-writer
+    newName: ghcr.1ms.run/kubeflow/kfp-metadata-writer
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-metadata-envoy
+    newName: ghcr.1ms.run/kubeflow/kfp-metadata-envoy
+    newTag: 2.18.0
+  # 使用用户实测的 tag；未校验镜像站是否保留上游 digest，不直接沿用。
+  - name: ghcr.io/metacontroller/metacontroller
+    newName: ghcr.1ms.run/metacontroller/metacontroller
+    newTag: v4.17.6
+  # 使用用户实测成功的原始路径，保留下划线名称。
+  - name: gcr.io/tfx-oss-public/ml_metadata_store_server
+    newName: gcr.1ms.run/tfx-oss-public/ml_metadata_store_server
+    newTag: 1.14.0
+  - name: quay.io/argoproj/workflow-controller
+    newName: quay.1ms.run/argoproj/workflow-controller
+    newTag: v4.1.6
+  # netvark 为第三方重新分发来源，拉取成功不等于与官方二进制内容一致。
+  - name: quay.io/minio/minio
+    newName: ghcr.1ms.run/netvark/minio
+    newTag: RELEASE.2025-09-07T16-13-09Z
+  - name: quay.io/minio/mc
+    newName: ghcr.1ms.run/netvark/mc
+    newTag: RELEASE.2025-08-13T08-35-41Z
+  - name: quay.io/brancz/kube-rbac-proxy
+    newName: quay.1ms.run/brancz/kube-rbac-proxy
+    newTag: v0.18.0
+  - name: ghcr.io/kubeflow/trainer/trainer-controller-manager
+    newName: ghcr.1ms.run/kubeflow/trainer/trainer-controller-manager
+    newTag: v2.3.0
+  - name: registry.k8s.io/jobset/jobset
+    newName: k8s.1ms.run/jobset/jobset
+    newTag: v0.12.0

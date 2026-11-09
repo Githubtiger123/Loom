@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://ghfast.top/https://raw.githubusercontent.com/argoproj/argo-workflows/v4.1.6/manifests/base/workflow-controller/workflow-controller-configmap.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/argoproj/argo-workflows/v4.1.6/manifests/base/workflow-controller/workflow-controller-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/argoproj/argo-workflows/v4.1.6/manifests/base/workflow-controller/workflow-controller-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/argoproj/argo-workflows/v4.1.6/manifests/base/workflow-controller/workflow-controller-priorityclass.yaml

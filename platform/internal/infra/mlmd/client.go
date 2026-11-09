@@ -34,6 +34,7 @@ type Artifact struct {
 	TypeDescription string         `json:"typeDescription"`
 	TypeProperties  map[string]int `json:"typeProperties"`
 	URI             string         `json:"uri"`
+	StorageURI      string         `json:"-"` // Original location for strict server-side validation, never public credentials.
 	State           string         `json:"state"`
 	CreatedAt       string         `json:"createdAtEpochMs"`
 	UpdatedAt       string         `json:"updatedAtEpochMs"`
@@ -154,10 +155,16 @@ func (c *Client) ReadRun(ctx context.Context, runID, namespace, executionID stri
 		}
 		token = next
 	}
-	if executionID == "" || !seen[executionID] {
+	if executionID == "" || (executionID != "*" && !seen[executionID]) {
 		return out, nil
 	}
 	executionIDs := []string{executionID}
+	if executionID == "*" {
+		executionIDs = make([]string, 0, len(out.Executions))
+		for _, e := range out.Executions {
+			executionIDs = append(executionIDs, e.ID)
+		}
+	}
 	artIDs := []string{}
 	artSeen := map[string]bool{}
 	for start := 0; start < len(executionIDs); start += 100 {
@@ -220,7 +227,7 @@ func (c *Client) ReadRun(ctx context.Context, runID, namespace, executionID stri
 			// Connection/Secret references are operational metadata, not artifact business metadata.
 			delete(r.Custom, "store_session_info")
 			delete(r.Properties, "store_session_info")
-			out.Artifacts[r.ID] = Artifact{ID: r.ID, Name: r.Name, TypeID: r.TypeID, Type: r.Type, URI: publicURI(r.URI), State: enum(r.State, []string{"UNKNOWN", "PENDING", "LIVE", "MARKED_FOR_DELETION", "DELETED", "ABANDONED", "REFERENCE"}), CreatedAt: r.Created, UpdatedAt: r.Updated, Properties: r.Properties, Custom: r.Custom, TypeProperties: map[string]int{}}
+			out.Artifacts[r.ID] = Artifact{ID: r.ID, Name: r.Name, TypeID: r.TypeID, Type: r.Type, URI: publicURI(r.URI), StorageURI: r.URI, State: enum(r.State, []string{"UNKNOWN", "PENDING", "LIVE", "MARKED_FOR_DELETION", "DELETED", "ABANDONED", "REFERENCE"}), CreatedAt: r.Created, UpdatedAt: r.Updated, Properties: r.Properties, Custom: r.Custom, TypeProperties: map[string]int{}}
 			if !typeSeen[r.TypeID] {
 				typeSeen[r.TypeID] = true
 				typeIDs = append(typeIDs, r.TypeID)

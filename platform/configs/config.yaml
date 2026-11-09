@@ -103,7 +103,7 @@ pipeline:
   token_file: "/var/run/secrets/kfp/token"
   service_account: "default-editor"
   # 替换为实际桶；平台自动追加 namespace/实例 UUID，用户不能覆盖根路径。
-  pipeline_root: "s3://REPLACE-ME/loom/pipelines"
+  pipeline_root: "s3://mlpipeline/loom/pipelines"
   timeout: 15s
   poll_interval: 15s
   # 独立状态同步：不依赖原操作单/原用户权限；只观察 Loom 已管理的 Run。
@@ -133,16 +133,29 @@ executor:
   client_ca: ""
   client_cert_sha256: []
 
-# 只读离线日志；采集端需提前上传日志和 manifest.json，详见 docs/log-archives.md。
+# 只读离线日志；install 中 Argo 自动归档到同一 MinIO，无需额外上传 manifest。
+# 安装集群并注入专用只读凭据后启用，详见 docs/log-archives.md。
 # 不依赖 pipeline.enabled，不创建桶、不写数据库日志索引。
 log_archive:
   enabled: false
+  format: argo
   endpoint: "http://minio.kubeflow.svc.cluster.local:9000"
-  bucket: "loom-logs"
+  bucket: "mlpipeline"
   prefix: "logs"
   region: "us-east-1"
   timeout: 15s
   # access_key / secret_key / session_token 通过 LOOM_LOG_ARCHIVE_* 环境变量注入。
+
+artifact_store:
+  # 普通可视化：指标只读 MLMD，报告/数据预览使用独立的产物只读账号。
+  enabled: false
+  endpoint: "http://minio.kubeflow.svc.cluster.local:9000"
+  bucket: mlpipeline
+  # 下级必须是 namespace；与 pipeline.pipeline_root 保持一致。
+  prefix: loom/pipelines
+  region: us-east-1
+  timeout: 15s
+  # access_key / secret_key / session_token 通过 LOOM_ARTIFACT_STORE_* 注入。
 
 log:
   level: "info" # debug | info | warn | error

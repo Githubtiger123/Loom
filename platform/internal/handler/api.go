@@ -35,13 +35,14 @@ type API struct {
 	logStreams      logStreamLimiter
 	terminalStreams logStreamLimiter
 	terminalPending chan struct{}
+	artifactReads   chan struct{}
 }
 
 // Endpoint 是请求处理函数，不负责注册路由。
 type Endpoint func(context.Context, *model.User, *http.Request) (any, error)
 
 func New(s *service.Service, identity config.Identity, logger *slog.Logger, managers ...*authn.Manager) *API {
-	a := &API{service: s, identity: identity, log: logger, terminalPending: make(chan struct{}, 64)}
+	a := &API{service: s, identity: identity, log: logger, terminalPending: make(chan struct{}, 64), artifactReads: make(chan struct{}, 4)}
 	if len(managers) > 0 {
 		a.auth = managers[0]
 	}
@@ -72,6 +73,10 @@ func (a *API) Wrap(action string, fn Endpoint) http.Handler {
 		}
 		if stream, ok := value.(*podLogResponse); ok {
 			a.writePodLogStream(w, r, stream)
+			return
+		}
+		if artifact, ok := value.(*artifactResponse); ok {
+			a.writeArtifactResponse(w, r, artifact)
 			return
 		}
 		status := http.StatusOK

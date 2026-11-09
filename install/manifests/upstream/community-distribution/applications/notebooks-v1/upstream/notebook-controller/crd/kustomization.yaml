@@ -1,0 +1,19 @@
+# This kustomization.yaml is not intended to be run by itself,
+# since it depends on service name and namespace that are out of this kustomize package.
+# It should be run by config/default
+
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+resources:
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/crd/bases/kubeflow.org_notebooks.yaml
+patchesStrategicMerge:
+  - patches/trivial_conversion_patch.yaml
+configurations:
+  - kustomizeconfig.yaml
+patchesJson6902:
+  - target:
+      group: apiextensions.k8s.io
+      version: v1
+      kind: CustomResourceDefinition
+      name: notebooks.kubeflow.org
+    path: patches/validation_patches.yaml

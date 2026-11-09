@@ -1,0 +1,8 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+resources:
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/rbac/role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/rbac/role_binding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/rbac/leader_election_role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/rbac/leader_election_role_binding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/notebooks-v1/upstream/notebook-controller/rbac/user_cluster_roles.yaml

@@ -1,0 +1,16 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kubeflow
+resources:
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/metadata/base/metadata-grpc-configmap.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/metadata/base/metadata-grpc-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/metadata/base/metadata-grpc-service.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/metadata/base/metadata-envoy-configmap.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/metadata/base/metadata-envoy-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/metadata/base/metadata-envoy-service.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/metadata/base/metadata-grpc-sa.yaml
+images:
+  - name: ghcr.io/kubeflow/kfp-metadata-envoy
+    newTag: 2.18.0

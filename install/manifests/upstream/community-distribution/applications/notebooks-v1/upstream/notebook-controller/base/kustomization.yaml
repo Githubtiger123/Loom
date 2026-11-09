@@ -1,0 +1,10 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../default
+images:
+  - name: ghcr.io/kubeflow/notebooks/notebook-controller
+    newName: ghcr.io/kubeflow/notebooks/notebook-controller
+    newTag: v1.11.1

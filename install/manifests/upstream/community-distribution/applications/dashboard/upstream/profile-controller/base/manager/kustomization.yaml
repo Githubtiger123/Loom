@@ -1,0 +1,28 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/dashboard/upstream/profile-controller/base/manager/leader_election_role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/dashboard/upstream/profile-controller/base/manager/leader_election_role_binding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/dashboard/upstream/profile-controller/base/manager/manager.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/dashboard/upstream/profile-controller/base/manager/namespace.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/dashboard/upstream/profile-controller/base/manager/role_binding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/dashboard/upstream/profile-controller/base/manager/service_account.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/dashboard/upstream/profile-controller/base/manager/user_cluster_roles.yaml
+labels:
+  - includeSelectors: true
+    pairs:
+      app: profile-controller
+      app.kubernetes.io/component: controller-manager
+configMapGenerator:
+  - name: profiles-config
+    envs:
+      - params.env
+  - name: profiles-namespace-labels-data
+    files:
+      - namespace-labels.yaml
+images:
+  - name: profile-controller
+    newName: ghcr.io/kubeflow/dashboard/profile-controller
+    newTag: v2.0.1

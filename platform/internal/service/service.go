@@ -30,6 +30,7 @@ type Service struct {
 	NotebookImages            *config.NotebookImageCatalog
 	PipelineClient            *kfp.Client
 	PipelineMetadata          PipelineMetadataReader
+	PipelineArtifacts         PipelineArtifactReader
 	PipelineConfig            config.Pipeline
 	PipelineVerifier          PipelineSpaceVerifier
 	PipelineLogs              PipelineLogReader

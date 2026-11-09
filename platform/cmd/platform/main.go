@@ -386,6 +386,9 @@ func runAPI(ctx context.Context, cfg *config.Config, logger *slog.Logger, d *dep
 	if err := configureLogArchive(businessService, cfg.LogArchive); err != nil {
 		return err
 	}
+	if err := configureArtifactStore(businessService, cfg.ArtifactStore); err != nil {
+		return err
+	}
 	api := handler.New(businessService, cfg.Identity, logger, authentication)
 	business := route.New(api)
 	srv := &http.Server{

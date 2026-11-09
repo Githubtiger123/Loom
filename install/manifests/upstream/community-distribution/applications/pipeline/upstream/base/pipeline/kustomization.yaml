@@ -1,0 +1,60 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - metadata-writer
+  - ui-signing-key
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-apiserver-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-apiserver-role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-apiserver-rolebinding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-apiserver-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-apiserver-service.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-persistenceagent-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-persistenceagent-role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-persistenceagent-rolebinding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-persistenceagent-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-scheduledworkflow-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-scheduledworkflow-role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-scheduledworkflow-rolebinding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-scheduledworkflow-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-ui-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-ui-configmap.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-ui-role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-ui-rolebinding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-ui-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-ui-service.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-viewer-crd-role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-viewer-crd-rolebinding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-viewer-crd-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-viewer-crd-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-visualization-deployment.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-visualization-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ml-pipeline-visualization-service.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/pipeline-runner-role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/pipeline-runner-rolebinding.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/pipeline-runner-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/container-builder-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/viewer-sa.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/kfp-launcher-configmap.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/public_configmap_role.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/public_configmap_role_binding.yaml
+configMapGenerator:
+  - name: kubeflow-pipelines-public
+    literals:
+      - kubeflow_pipelines_version=v2.18.0
+    options:
+      disableNameSuffixHash: true
+images:
+  - name: ghcr.io/kubeflow/kfp-api-server
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-persistence-agent
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-scheduled-workflow-controller
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-frontend
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-viewer-crd-controller
+    newTag: 2.18.0
+  - name: ghcr.io/kubeflow/kfp-visualization-server
+    newTag: 2.18.0

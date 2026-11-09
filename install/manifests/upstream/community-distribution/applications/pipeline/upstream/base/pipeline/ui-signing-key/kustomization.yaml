@@ -1,0 +1,18 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ui-signing-key/secret.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ui-signing-key/rbac.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/pipeline/upstream/base/pipeline/ui-signing-key/job.yaml
+configMapGenerator:
+  - name: ml-pipeline-ui-signing-key-init
+    literals:
+      - image=ghcr.io/kubeflow/kfp-frontend:dummy
+      - secretName=ml-pipeline-ui-tensorboard-proxy
+      - secretKey=signing-secret
+    files:
+      - job-template=job.yaml
+configurations:
+  - configuration.yaml

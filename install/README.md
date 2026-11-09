@@ -6,7 +6,29 @@
 
 ## 使用
 
-仅面向 Linux 部署，准备 Bash、Git、kubectl 和独立 Kustomize v5.8.1。kubectl 版本需匹配集群；脚本不会安装工具、修改节点或覆盖 kubeconfig。唯一安装入口是 `install.sh`。
+### 手动逐组件安装与下载代理
+
+全部组件的 GitHub 安装依赖已统一改用 `https://ghfast.top/`，包括 cert-manager、Istio、Profile、Notebook、聚合角色、Pipeline/Argo、KServe、Trainer/JobSet。上游 Kustomize 目录、配置和补丁保存在 `manifests/upstream/`，独立资源 YAML 通过代理读取，不再通过 Git 拉取远程目录。请一次性将本地整个 `install/` 更新上传到服务器 `/home/ubuntu/install/`，保留你自己的 `install.local.env`、仓库凭据和 `secrets.local.yaml`；后续继续按组件手动安装即可。已有服务器上的旧 `install.zip` 不会随源码修改自动更新，需要重新上传本次修改的文件。
+
+```bash
+cd /home/ubuntu/install
+kubectl --context default apply --server-side -k ./manifests/cert-manager
+kubectl --context default rollout status deployment/cert-manager -n cert-manager --timeout=600s
+kubectl --context default rollout status deployment/cert-manager-webhook -n cert-manager --timeout=600s
+kubectl --context default rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=600s
+```
+
+Istio 保留官方锁定版本的全部 base 补丁和 Loom 外层安全补丁，包含 `istio/base/upstream/`；其他组件共享 `manifests/upstream/`，不能只上传组件入口文件。嵌套的 Argo Git 目录引用已展开成本地 base，JobSet release 文件也走代理。已确认服务器能下载 cert-manager 文件，尚未逐项验证其他文件或容器镜像的可达性。依赖来源及布局见 [上游配置说明](manifests/upstream/README.md)。
+
+已确认此 RKE2/Calico 集群使用 `/opt/cni/bin` 和 `/etc/cni/net.d/10-calico.conflist`，与当前 Istio CNI 清单的 hostPath 一致，不改成 RKE2 默认目录。新集群仍需单独确认。手动安装前先 `kubectl apply -f manifests/namespaces.yaml`，否则 Istio base 中落到 `kubeflow` 的策略会报 namespace 不存在。然后安装 Istio：先 `kubectl apply --server-side -k manifests/istio/crds`，等待 `virtualservices.networking.istio.io`、`authorizationpolicies.security.istio.io` CRD Established，再 `kubectl apply --server-side -k manifests/istio/base`；随后检查 `kube-system/istio-cni-node` DaemonSet 和 `istio-system` 的两个 Deployment。默认入口为 ClusterIP，不修改 ingress-nginx，也不启用 Notebook 浏览器网关。
+
+本次服务器的 Istio CNI 曾因 `couldn't initialize inotify: too many open files` 退出，提高 `fs.inotify.max_user_instances` 并重启 DaemonSet 后已恢复。这不是镜像拉取问题，也不应据此更改 CNI 路径。脚本不自动修改节点 sysctl；若当时只执行了 `sysctl -w`，可在该节点用 `sysctl fs.inotify.max_user_instances | tee /etc/sysctl.d/99-loom-inotify.conf` 保存已确认的值，避免重启后丢失。其他节点需逐台检查，不盲目覆盖系统参数。
+
+代理是第三方传输服务，不改变上游版本，也不是容器镜像加速器。不得向代理发送 kubeconfig、Token、Secret 或私有仓库凭据；高信任生产环境应校验清单来源并将依赖落到受控本地目录或内部仓库。
+
+### 总脚本入口
+
+仅面向 Linux 部署，总脚本准备 Bash 和匹配集群的 kubectl，统一使用内置 Kustomize 的 `kubectl apply --server-side -k`，不再要求独立 Kustomize 或 Git。当前服务器的 kubectl v1.35.9+rke2r1 内置 Kustomize v5.7.1，用户已用它安装 cert-manager 和 Istio；其他组件仍需实际安装验证。脚本不会安装工具、修改节点或覆盖 kubeconfig。
 
 先审阅 `manifests/` 中的资源参数，然后执行：
 
@@ -38,7 +60,9 @@ INSTALL_TRAINER=true bash install.sh YOUR_KUBECTL_CONTEXT
 |---|---|---|
 | INSTALL_CERT_MANAGER | true | 安装 cert-manager；已有兼容版本可设 false |
 | INSTALL_ISTIO | true | 安装标准 sidecar/CNI Istio；已有兼容版本可设 false |
-| INSTALL_PIPELINE | false | 安装 KFP 及 Argo、MySQL、MLMD、SeaweedFS |
+| INSTALL_PROFILES | true | 安装 Profile Controller；逐组件安装时可设 false |
+| INSTALL_NOTEBOOK | true | 安装 Notebook Controller；逐组件安装时可先设 false |
+| INSTALL_PIPELINE | false | 安装 KFP 及 Argo、MySQL、MLMD、MinIO |
 | INSTALL_KSERVE | false | 安装 Standard 模式 KServe，不装 Knative |
 | INSTALL_TRAINER | false | 安装 Trainer v2.3.0、JobSet v0.12.0 和官方训练运行时 |
 | INSTALL_NOTEBOOK_GATEWAY | false | 应用可选 Notebook HTTPS 与 Loom ext_authz 配置 |
@@ -47,6 +71,65 @@ INSTALL_TRAINER=true bash install.sh YOUR_KUBECTL_CONTEXT
 | WAIT_TIMEOUT | 600s | 每条就绪等待的超时 |
 
 这些开关只控制本次是否 apply，**设为 false 不会卸载已有组件或撤销权限**。
+
+### 毫秒镜像与来源核验
+
+根据用户分两次贴出的实际拉取结果，**19 个安装期镜像均已改为对应的毫秒镜像地址**，tag 保持不变，集中维护在 [registry/kustomization.yaml](manifests/registry/kustomization.yaml)。Profile、Notebook、KFP、MinIO、KServe 和 Trainer 的安装入口共用这一份映射，直接执行对应的 `kubectl apply -k` 即生效。原始上游配置保留来源地址，Loom 外层负责映射。
+
+成功项按原路径分别使用 `ghcr.1ms.run`、`gcr.1ms.run`、`quay.1ms.run` 和 `k8s.1ms.run`，版本 tag 不变。ML Metadata 使用实测成功的 `gcr.1ms.run/tfx-oss-public/ml_metadata_store_server:1.14.0`，保留原始下划线名称。
+
+原先失败的 3 个条目，已按后续成功结果替换：
+
+| 镜像 | 当前完整镜像引用 |
+|---|---|
+| Metacontroller | ghcr.1ms.run/metacontroller/metacontroller:v4.17.6 |
+| MinIO | ghcr.1ms.run/netvark/minio:RELEASE.2025-09-07T16-13-09Z |
+| mc | ghcr.1ms.run/netvark/mc:RELEASE.2025-08-13T08-35-41Z |
+
+**MinIO/mc 的 netvark 是第三方来源，不是原 minio 组织的同路径镜像。** 用户已确认能够拉取，但没有核验其构建、二进制内容、架构、漏洞或与官方版本的等价性；同名 tag 不能证明内容一致。Metacontroller 也没有在未核验的情况下复用上游 digest，生产应先核验来源，再将实际镜像摘要锁定到受控仓库。本次仅替换地址，不因此升级 MinIO 版本。
+
+另外，KFP 运行任务所用的 driver/launcher 已按用户指定改为 DaoCloud 地址，版本保持 `2.18.0`：
+
+```text
+ghcr.m.daocloud.io/kubeflow/kfp-driver:2.18.0
+ghcr.m.daocloud.io/kubeflow/kfp-launcher:2.18.0
+```
+
+这两个引用通过 [pipeline/base/kustomization.yaml](manifests/pipeline/base/kustomization.yaml) 补丁设置 API Server 的 `V2_DRIVER_IMAGE`、`V2_LAUNCHER_IMAGE`，不是普通容器 `image` 字段。用户日志显示已开始下载层，尚未展示完整拉取成功结果；未确认服务器 containerd 可达。更新安装配置只影响后续按新配置生成的任务，不重写已有 Workflow/Pod 的镜像。
+
+另外按用户提供的拉取进展替换以下三个平台依赖，版本 tag 不变：
+
+```text
+ghcr.1ms.run/containerd/busybox:1.28
+quay.1ms.run/argoproj/argoexec:v4.1.6
+docker.1ms.run/library/alpine:3.23.7
+```
+
+BusyBox 位于 Istio `grpc-simple` 注入模板的文本内部，普通镜像映射不会修改这段文本，因此将同一锁定 commit 的完整 `istio/base/upstream/install.yaml` 保存在本地，仅替换模板内的 BusyBox 地址，其他原始资源和外层安全补丁不变。此模板是可选路径，不改变默认 sidecar 模板或 Istio 控制面/CNI 镜像。Argo executor 通过外层补丁修改 workflow-controller 的 `--executor-image` 参数；Alpine 通过 `pipeline/base/pipeline-config.yaml` 修改 `cacheImage`，不是替换安装期的 `alpine:3.23`。Alpine 未核验新仓库摘要，按用户指定使用 tag，不沿用原 `mirror.gcr.io` digest。
+
+上传更新后的安装目录再 apply 对应组件才会影响集群；本轮未执行安装或重启。用户输出显示这三个镜像已开始拉取，不等于完整下载和集群运行均已验证。已有 Workflow/Pod 不会被自动重写。Pipeline 已运行时，ConfigMap 中的缓存镜像会作为 cache-server 环境变量在启动时读取，更新 ConfigMap 后需在合适窗口手动重启 `kubeflow/cache-server` Deployment 才能更新该进程的值。
+
+不更改已装好的 cert-manager 或 Istio 控制面/CNI 镜像，不批量迁移其他 Docker Hub 镜像，也不假设 Notebook 镜像和训练/推理运行时已上传。当前不是全离线运行配置。
+
+当前这批公开镜像直接拉取，不需要阿里云登录、服务器 `docker pull`、改回原标签或 `ctr import`。所有组件均已移除对 `aliyun-registry` 的强制引用，脚本不再读取 Docker 登录配置或创建镜像仓库 Secret；旧的 `IMAGE_PULL_SECRET_FILE` / `IMAGE_PULL_SECRET_NAME` 本地选项不再使用。旧集群中的仓库 Secret 不会被自动删除，若要停用凭据应由管理员另行处理。Pipeline 的 MySQL/MinIO 业务凭据仍必须配置，不能把取消仓库登录误认为取消数据库/S3 鉴权。
+
+将更新后的整个 `install/` 上传后，当前先继续安装 Profile：
+
+```bash
+cd /home/ubuntu/install
+# 首次创建即可；已有本地配置不要覆盖。
+cp -n install.example.env install.local.env
+chmod 600 install.local.env
+bash install.sh default
+```
+
+此示例跳过已完成的 cert-manager/Istio apply（仍检查它们就绪），开启 Profile、暂不开 Notebook/KFP/KServe/Trainer，保留 Namespace、聚合角色和 Loom 机器权限的应用步骤；不读取 Docker 凭据。`install.local.env` 会在后续运行时自动加载；同名环境变量可以覆盖示例值。旧 `PROFILE_CONTROLLER_IMAGE` 会提示忽略，不再覆盖统一映射。
+
+统一配置也覆盖 KFP 的签名密钥初始化 Job、MinIO bootstrap Job 和 KFP Profile hook 的 mc init container，不只替换常驻 Deployment。MinIO bootstrap 更新为 `loom-minio-bootstrap-v4`，避免修改旧版 Job 的不可变 Pod 模板；旧 Job 不自动删除。这只是初始化 Job 的配置版本，不是升级 MinIO/mc 的镜像 tag。
+
+毫秒镜像的成功结果来自用户本地 Docker，不代表服务器 containerd 已验证可达，也不代表已经校验镜像供应链。生产建议转存受控仓库并核对 digest；本轮不重新拉取、运行或测试镜像。
+
+已有临时补丁或其他安装器管理同一字段时，SSA 可能报所有权冲突。脚本不会自动 `--force-conflicts` 抢占，请确认差异及现有值后人工处理。安装超时不删除资源，修正镜像或凭据后使用相同本地配置重跑。
 
 ## 资源与版本
 
@@ -58,11 +141,12 @@ INSTALL_TRAINER=true bash install.sh YOUR_KUBECTL_CONTEXT
 | manifests/profiles | Profile Controller，无 Dashboard/KFAM | v2.0.1 |
 | manifests/notebook | Notebook v1 控制器，无 Notebook Web App | v1.11.1 |
 | manifests/pipeline | KFP 多租户后端及执行依赖 | KFP 2.18.0、Argo v4.1.6 |
+| manifests/minio | 持久对象存储、桶与最小权限账号初始化 | MinIO RELEASE.2025-09-07T16-13-09Z；mc RELEASE.2025-08-13T08-35-41Z |
 | manifests/kserve | CRD、控制器、运行时 | v0.21.0，Standard |
 | manifests/trainer | TrainJob/Runtime CRD、控制器、JobSet、训练运行时 | Trainer v2.3.0、JobSet v0.12.0 |
 | manifests/gateway | 可选 Notebook HTTPS 访问入口 | Loom 配置 |
 
-本地保存 Kustomize 适配、参数和业务机器权限，官方大清单引用 community-distribution 固定 commit：
+本地保存 Kustomize 适配、参数、补丁、依赖目录和业务机器权限，官方资源 YAML 通过代理引用 community-distribution 固定 commit：
 
 `96e316a80e257a9f645c7c1ee0e1a94b904dead7`
 
@@ -72,15 +156,16 @@ Argo 的上游引用固定在 v4.1.6，不跟随 master/latest。升级需要审
 
 ```bash
 kubectl --context YOUR_KUBECTL_CONTEXT apply -f manifests/namespaces.yaml
-kustomize build manifests/profiles | kubectl --context YOUR_KUBECTL_CONTEXT apply --server-side --field-manager=loom-installer -f -
+# Profile 现使用公开毫秒镜像，不需要阿里云 Secret。
+kubectl --context YOUR_KUBECTL_CONTEXT apply --server-side --field-manager=loom-installer -k manifests/profiles
 kubectl --context YOUR_KUBECTL_CONTEXT wait --for=condition=Established crd/profiles.kubeflow.org --timeout=600s
 ```
 
-使用独立 Kustomize 再交给 apply，是为了固定 Kustomize 行为；不是另写安装器。若以后统一核对了 kubectl 的内置 Kustomize 版本，也可等价使用 `kubectl apply -k`。
+使用 kubectl 内置 Kustomize，升级 kubectl 时应同时核对 `kubectl version` 显示的 Kustomize 版本。镜像映射作为共享 Kustomize Component 已直接接入各安装目录，上游清单保持不变。
 
 安装顺序是 Namespace → cert-manager → Istio → 聚合角色 → Profile → Notebook → 可选 KFP/KServe/Trainer → Loom 机器权限。KFP 先装 Workflow、DecoratorController 等 CRD；KServe 先装 CRD、控制器、证书和 webhook，等就绪后再应用运行时 CR。Trainer 先装自身 CRD，再装控制器及 JobSet，等待 CRD、控制器和 webhook CA 就绪后应用训练运行时。
 
-**当前不是全离线资源包**：Kustomize 会访问锁定的 GitHub 资源，集群也需能拉取对应镜像。离线环境需要提前将官方资源和镜像镜像化/归档，将引用改为审阅过的本地路径；不能只复制 install 目录就假设已离线打包。
+**当前不是全离线资源包**：Kustomize 会通过 `ghfast.top` 访问锁定的官方资源 YAML，集群也需能拉取对应镜像。当前安装依赖链不再直接 Git clone GitHub。离线环境仍需将资源和镜像归档，将引用改为审阅过的本地路径；不能只复制 install 目录就假设已离线打包。
 
 ## 部署前提与参数修改
 
@@ -110,7 +195,7 @@ Profile owner=`admin` 仍由 Loom worker 在创建 Profile 时填写；脚本不
 
 ## 凭据和机器权限
 
-KFP 的两个 Secret 不采用上游空密码和 minio/minio123。先准备 secrets.local.yaml，脚本单独 apply；官方 Kustomize 中的同名 Secret 被删除，不会覆盖你填写的值。MySQL 初始化环境引用 mysql-secret；SeaweedFS 使用 mlpipeline-minio-artifact。
+KFP/MinIO 的 Secret 不采用上游空密码和 minio/minio123。先准备 secrets.local.yaml，脚本单独 apply；官方 Kustomize 中的同名 Secret 被排除，不会覆盖你填写的值。MySQL 使用 mysql-secret。MinIO root、KFP 后端只读、Loom 日志只读、Loom 产物只读为四个不同账号，空间工作负载另有独立账号，详见 [MinIO 配置](minio.md)。
 
 **已有 MySQL/PVC 时必须沿用原密码**。apply Secret 不等于修改数据库内部密码；脚本不再帮你生成、比较或轮换凭据。妥善限制本地文件权限并备份，不开 bash -x，不公开失败 patch/Secret。旧安装器留下的 .state/.generated 不会被清理，若已有凭据应安全迁移，不能重新填另一套密码。
 
@@ -144,7 +229,7 @@ kserve:
   deployment_mode: Standard
 ```
 
-KFP 仍保留自己的执行数据库，不合并 Loom/KFP schema。其对象存储是该版本官方 SeaweedFS，不再加一套 MinIO。Argo archiveLogs 默认开启，但原生日志结构与 Loom 离线日志 manifest.json 契约不同，不能因此宣称离线日志接口已接通，也不自动启用 log_archive。
+KFP 仍保留自己的执行数据库，不合并 Loom/KFP schema。安装适配排除官方 SeaweedFS，统一使用 MinIO；部署顺序为 Secret → MinIO/PVC → 桶和账号初始化 → KFP/Argo。Argo archiveLogs 默认开启并按执行 UUID 归档，Loom 的 argo 模式直接读取，不再要求额外 manifest。API 需合并 examples/log-archive-api-pod-spec.yaml 的只读 Secret 环境变量。未注入凭据前 log_archive 仍默认关闭，不宣称已部署或联调成功。
 
 ## Notebook 浏览器入口
 

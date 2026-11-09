@@ -1,7 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/kubeflow/community-distribution/applications/notebooks-v1/upstream/notebook-controller/overlays/kubeflow?ref=96e316a80e257a9f645c7c1ee0e1a94b904dead7
+  - ../upstream/community-distribution/applications/notebooks-v1/upstream/notebook-controller/overlays/kubeflow
+components:
+  - ../registry
 configMapGenerator:
   - name: notebook-controller-config
     behavior: merge

@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeflow-pipelines-profile-controller
+  namespace: kubeflow
+spec:
+  template:
+    spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: minio-client
+          image: ghcr.1ms.run/netvark/mc:RELEASE.2025-08-13T08-35-41Z
+          command: [/bin/sh, -c, "cp /usr/bin/mc /tools/mc"]
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+      containers:
+        - name: profile-controller
+          command: [python3, /minio-hooks/minio-profile-sync.py]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom: {secretKeyRef: {name: minio-root, key: accesskey}}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: minio-root, key: secretkey}}
+            - name: MC_CONFIG_DIR
+              value: /tmp/mc
+            - name: LOG_ARCHIVE_CLUSTER
+              value: default
+            - name: AWS_ENDPOINT_URL
+              $patch: delete
+            - name: S3_ENDPOINT_URL
+              $patch: delete
+            - name: AWS_ACCESS_KEY_ID
+              $patch: delete
+            - name: AWS_SECRET_ACCESS_KEY
+              $patch: delete
+            - name: OBJECT_STORE_HOST
+              $patch: delete
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+              readOnly: true
+            - name: minio-hooks
+              mountPath: /minio-hooks
+              readOnly: true
+            - name: temp
+              mountPath: /tmp
+      volumes:
+        - name: tools
+          emptyDir: {}
+        - name: temp
+          emptyDir: {}
+        - name: minio-hooks
+          configMap:
+            name: loom-kfp-minio-hooks

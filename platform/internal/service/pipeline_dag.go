@@ -152,6 +152,10 @@ func (s *Service) PipelineRunNode(ctx context.Context, actor, groupID, id uint64
 }
 
 func (s *Service) readPipelineDAG(ctx context.Context, actor, groupID, id uint64, nodeID string) (*pipelineDAGRead, error) {
+	return s.readPipelineDAGArtifacts(ctx, actor, groupID, id, nodeID, false)
+}
+
+func (s *Service) readPipelineDAGArtifacts(ctx context.Context, actor, groupID, id uint64, nodeID string, allArtifacts bool) (*pipelineDAGRead, error) {
 	n, err := s.PipelineRun(ctx, actor, groupID, id)
 	if err != nil {
 		return nil, err
@@ -197,6 +201,9 @@ func (s *Service) readPipelineDAG(ctx context.Context, actor, groupID, id uint64
 		}
 		metadataCtx, cancel := context.WithDeadline(ctx, end)
 		executionID := ""
+		if allArtifacts {
+			executionID = "*" // Internal request: all events of this verified run context.
+		}
 		if strings.HasPrefix(nodeID, "execution-") {
 			executionID = strings.TrimPrefix(nodeID, "execution-")
 		}

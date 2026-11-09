@@ -224,6 +224,6 @@ API 与 pipeline-worker 使用同一配置。API 用于实时详情及限制混�
 
 Pipeline 在线终端已另外接入 Kubernetes `pods/exec`，复用节点归属解析，独立检查组内 `pipeline.exec` 和运行对象权限。不是 KFP Run API 的新命令，也不经过 worker；权限迁移、首帧 Access 认证和 WebSocket 协议见 [在线终端](pipeline-terminal.md)。不提供独立调试 Pod 或单节点运行。
 
-Experiment 管理、向官方 Pipeline/version 目录上传同步、RecurringRun 定时调度、artifact 根输入、平台扩展、多文档包、凭据引用解析、产物下载/MLMD 浏览、官方缓存管理接口、无损暂停恢复、失败节点原地 Retry、前端和集群安装不在此次主线范围。在线节点日志已独立接入 Kubernetes pods/log，需显式应用 000018_pipeline_logs.sql，详见 [公共日志组件](pod-logs.md)。[离线日志](log-archives.md) 已补 MinIO 按需读取接口，复用该权限，不增加日志索引表；采集端需先上传约定格式，编辑/删除不等待归档完成。可提交新业务运行，也可编辑清理后手动重建；不能借操作重试复用终态 KFP ID。
+Experiment 管理、向官方 Pipeline/version 目录上传同步、RecurringRun 定时调度、artifact 根输入、平台扩展、多文档包、凭据引用解析、官方缓存管理接口、无损暂停恢复、失败节点原地 Retry、前端不在此次主线范围。DAG/节点已接入 MLMD 参数和产物元数据；[普通可视化](pipeline-visualizations.md) 已另补指标解析、MinIO 文件预览和下载，不包括 TensorBoard 或旧版可视化生成服务。在线节点日志已独立接入 Kubernetes pods/log，需显式应用 000018_pipeline_logs.sql，详见 [公共日志组件](pod-logs.md)。[离线日志](log-archives.md) 已补 MinIO 按需读取接口，复用该权限，不增加日志索引表；install 配置 Argo 自动归档，argo 模式直接读取，不要求 manifest，编辑/删除仍不等待归档完成。集群安装清单见 [MinIO](../../install/minio.md)，未执行验证。可提交新业务运行，也可编辑清理后手动重建；不能借操作重试复用终态 KFP ID。
 
 核心源码：`internal/infra/kfp/client.go`、`internal/service/pipeline_package.go`、`internal/service/pipeline_execution.go`、`internal/service/pipeline_sync.go`、`internal/worker/pipeline.go`、`internal/config/pipeline.go` 和相关迁移。本轮未改动官方 KFP 引擎、Notebook 生命周期或 Trainer 执行逻辑。

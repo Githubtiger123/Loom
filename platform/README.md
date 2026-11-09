@@ -5,7 +5,7 @@
 
 集群首次安装入口见 [install/README.md](../install/README.md)：固定版本的 Profile/Notebook 控制器、Istio、cert-manager，以及可选 KFP/KServe/Trainer。Trainer 可安装 v2.3.0 + JobSet v0.12.0 和官方运行时，业务执行器仍未实现。脚本与配置已提供但未执行，不代替 Loom 业务库初始化、应用镜像部署及访问链路核验。
 
-Pipeline 后端新增 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行 IR 快照 + KFP 状态 + MLMD 参数/产物元数据；不包含前端或产物可视化。
+Pipeline 后端包含 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行 IR 快照 + KFP 状态 + MLMD 参数/产物元数据；另已补充 [普通可视化接口](docs/pipeline-visualizations.md)，提供指标解析、MinIO 产物预览和下载。前端图表及 TensorBoard 未实现。
 
 前端操作入口可使用 [当前用户空间权限快照](docs/group-permissions.md)，不从全局权限推导组内权限；快照不替代各业务接口授权。
 
@@ -102,7 +102,7 @@ go run ./cmd/platform -cmd=kserve-worker -worker-concurrency=4
 
 Pipeline 支持版本原地编辑和运行“清理后编辑、手动重建”。显式应用新增 `000017_pipeline_edit.sql` 后，同步升级 API/worker；业务运行 ID 保留，重建换新 instanceId/KFP Run ID，旧执行快照保留。详见 [编辑接口](docs/pipeline-edit.md)。本轮未执行迁移或真实联调。
 
-Pipeline 在线日志通过公共 `internal/k8s/podlog` Reader 直读 Kubernetes，支持快照和 follow；Notebook 现有日志快照也复用该组件。需显式应用 `000018_pipeline_logs.sql`，并为 API 机器身份配置只读 pods/log 与执行归属核验权限，详见 [日志接口](docs/pod-logs.md)。[离线日志](docs/log-archives.md) 使用独立 `log_archive` 配置从 MinIO 按需读取清单和日志，不新增日志表，支持历史/软删除运行；采集端需提前上传约定格式，不安装采集器，不自动适配任意 Argo 归档桶。
+Pipeline 在线日志通过公共 `internal/k8s/podlog` Reader 直读 Kubernetes，支持快照和 follow；Notebook 现有日志快照也复用该组件。需显式应用 `000018_pipeline_logs.sql`，并为 API 机器身份配置只读 pods/log 与执行归属核验权限，详见 [日志接口](docs/pod-logs.md)。[离线日志](docs/log-archives.md) 从 MinIO 按需读取，不新增日志表，支持历史/软删除运行；install 已配置 Argo 自动上传，argo 模式按执行 UUID 直接列举和读取，不要求 manifest，旧采集协议保留为 manifest 模式。安装步骤见 [MinIO](../install/minio.md)，未实际部署验证。
 
 [Pipeline 在线终端](docs/pipeline-terminal.md) 使用公共 `internal/k8s/podexec` 直连 Kubernetes pods/exec，支持 WebSocket 输入、TTY 输出和窗口缩放。组内 `pipeline.exec` 与日志权限独立；需显式应用 `000019_pipeline_exec.sql`，机器身份需 pods/exec 的 get/create 权限。仅支持当前运行中的普通容器及镜像自带 shell，首帧复用现有 Access JWT，不新增凭据或终端表，不经过 worker；本次没有实现前端或独立调试 Pod。
 

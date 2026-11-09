@@ -15,6 +15,8 @@ web/certs/
 platform/configs/config.local.yaml
 # 旧安装器可能已生成凭据，继续忽略并保留，不自动删除或迁移。
 install/config.local.yaml
+install/install.local.env
+install/.registry-credentials/
 install/.sources/
 install/.generated/
 install/.state/

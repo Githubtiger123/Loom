@@ -1,0 +1,130 @@
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/kserve/kserve/namespace.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/kserve/kserve/upstream/kserve.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/kserve/kserve/upstream/kserve-cluster-resources.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/kserve/kserve/aggregated-roles.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/applications/kserve/kserve/kserve-networkpolicy.yaml
+patches:
+  - patch: |-
+      - op: remove
+        path: /metadata/namespace
+    target:
+      group: serving.kserve.io
+      version: v1alpha1
+      kind: ClusterStorageContainer
+      name: default
+  - patch: |-
+      - op: add
+        path: /spec/container/securityContext
+        value:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+    target:
+      group: serving.kserve.io
+      version: v1alpha1
+      kind: ClusterStorageContainer
+      name: default
+  - patch: |-
+      - op: add
+        path: /spec/template/metadata/annotations/sidecar.istio.io~1inject
+        value: "false"
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      labelSelector: control-plane
+  - patch: |
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: kserve-localmodelnode-agent
+        namespace: kserve
+      $patch: delete
+  - patch: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: kserve-localmodelnode-agent
+        namespace: kserve
+      $patch: delete
+  - patch: |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: kserve-localmodelnode-agent-role
+      $patch: delete
+  - patch: |
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: kserve-localmodelnode-agent-rolebinding
+      $patch: delete
+  - patch: |
+      apiVersion: serving.kserve.io/v1alpha2
+      kind: LLMInferenceServiceConfig
+      metadata:
+        name: placeholder
+      $patch: delete
+    target:
+      group: serving.kserve.io
+      version: v1alpha2
+      kind: LLMInferenceServiceConfig
+  - patch: |
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: ValidatingWebhookConfiguration
+      metadata:
+        name: llminferenceserviceconfig.serving.kserve.io
+      $patch: delete
+  - patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: inferenceservice-config
+        namespace: kserve
+      data:
+        ingress: |-
+          {
+            "disableHTTPRouteTimeout": false,
+            "enableGatewayApi": false,
+            "kserveIngressGateway": "kserve/kserve-ingress-gateway",
+            "ingressGateway": "kubeflow/kubeflow-gateway",
+            "localGateway": "knative-serving/knative-local-gateway",
+            "localGatewayService": "knative-local-gateway.istio-system.svc.cluster.local",
+            "ingressDomain": "example.com",
+            "ingressClassName": "istio",
+            "domainTemplate": "{{ .Name }}-{{ .Namespace }}.{{ .IngressDomain }}",
+            "urlScheme": "http",
+            "disableIstioVirtualHost": false,
+            "disableIngressCreation": false,
+            "pathTemplate": "/serving/{{ .Namespace }}/{{ .Name }}"
+          }
+  - patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: inferenceservice-config
+        namespace: kserve
+      data:
+        kernelcache: |-
+          {
+            "enabled": false,
+            "defaultSidecarInjection": true,
+            "defaultMountType": "oci",
+            "defaultNodeGroup": "",
+            "jobNamespace": "kserve-kernelcache-jobs",
+            "mcvImage": "kserve/kserve-mcv:v0.21.0-minimal",
+            "prefetchImage": "registry.access.redhat.com/ubi9/ubi-minimal:9.8",
+            "abandonedCapturePolicy": "retain",
+            "jobTTLSecondsAfterFinished": 600,
+            "mcvCaptureReadinessTimeoutSeconds": 600,
+            "reconcileIntervalSeconds": 300
+          }

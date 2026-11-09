@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # 镜像来源及 Pod 模板改变，使用新名称兼容旧版不可变 Job；不删除旧 Job。
+  name: loom-minio-bootstrap-v4
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: minio-bootstrap
+        sidecar.istio.io/inject: "false"
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: bootstrap
+          image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+          command: [/bin/sh, /config/bootstrap.sh]
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/mc
+            - name: MINIO_ROOT_USER
+              valueFrom: {secretKeyRef: {name: minio-root, key: accesskey}}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: {secretKeyRef: {name: minio-root, key: secretkey}}
+            - name: KFP_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: mlpipeline-minio-artifact, key: accesskey}}
+            - name: KFP_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: mlpipeline-minio-artifact, key: secretkey}}
+            - name: LOG_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: minio-log-reader, key: accesskey}}
+            - name: LOG_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: minio-log-reader, key: secretkey}}
+            - name: ARTIFACT_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: minio-artifact-reader, key: accesskey}}
+            - name: ARTIFACT_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: minio-artifact-reader, key: secretkey}}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: temp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap: {name: minio-bootstrap}
+        - name: temp
+          emptyDir: {}

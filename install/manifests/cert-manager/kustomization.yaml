@@ -1,4 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/kubeflow/community-distribution/common/cert-manager/base?ref=96e316a80e257a9f645c7c1ee0e1a94b904dead7
+  # Download the exact YAML through the proxy; do not use a Git directory URL,
+  # which would still require git clone support from the download proxy.
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/cert-manager/base/upstream/cert-manager.yaml
+patches:
+  # Preserve the namespace patch from the original official base.
+  - path: namespace-patch.yaml

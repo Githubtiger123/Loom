@@ -46,7 +46,8 @@ func (e Entry) valid() bool {
 }
 
 type Manifest struct {
-	Version int `json:"version"`
+	Version int    `json:"version"`
+	Source  string `json:"source"`
 	Execution
 	Complete bool    `json:"complete"`
 	Entries  []Entry `json:"entries"`
@@ -67,6 +68,8 @@ type Reader struct {
 	client         *minio.Client
 	bucket, prefix string
 	timeout        time.Duration
+	format         string
+	nativeSlots    chan struct{}
 }
 
 // New constructs a client only; no network calls or bucket creation at startup.
@@ -85,7 +88,8 @@ func New(c config.LogArchive) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Reader{client: client, bucket: c.Bucket, prefix: c.Prefix, timeout: c.Timeout.Std()}, nil
+	return &Reader{client: client, bucket: c.Bucket, prefix: c.Prefix, timeout: c.Timeout.Std(),
+		format: c.Format, nativeSlots: make(chan struct{}, 4)}, nil
 }
 
 func (r *Reader) executionPrefix(e Execution) (string, error) {
@@ -114,6 +118,9 @@ func invalidManifest() error {
 }
 
 func (r *Reader) Manifest(ctx context.Context, e Execution) (*Manifest, error) {
+	if r.format == "argo" {
+		return r.argoManifest(ctx, e)
+	}
 	prefix, err := r.executionPrefix(e)
 	if err != nil {
 		return nil, err
@@ -146,11 +153,15 @@ func (r *Reader) Manifest(ctx context.Context, e Execution) (*Manifest, error) {
 	if m.Entries == nil {
 		m.Entries = []Entry{}
 	}
+	m.Source = "MANIFEST"
 	return &m, nil
 }
 
 // Read fetches a bounded byte range from plain UTF-8 objects. ETag pins pagination.
 func (r *Reader) Read(ctx context.Context, e Execution, entry Entry, offset, limit int64) (*Chunk, error) {
+	if r.format == "argo" {
+		return r.readArgo(ctx, e, entry, offset, limit)
+	}
 	if !entry.valid() {
 		return nil, invalidManifest()
 	}

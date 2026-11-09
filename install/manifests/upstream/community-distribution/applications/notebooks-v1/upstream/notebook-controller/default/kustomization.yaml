@@ -1,0 +1,14 @@
+# Adds namespace to all resources.
+
+# Source: kubeflow/community-distribution @ 96e316a80e257a9f645c7c1ee0e1a94b904dead7
+# Local Kustomize structure; remote resource YAMLs use ghfast.top.
+namespace: notebook-controller-system
+namePrefix: notebook-controller-
+commonLabels:
+  app: notebook-controller
+  kustomize.component: notebook-controller
+bases:
+  - ../rbac
+  - ../manager
+  - ../crd
+vars: null

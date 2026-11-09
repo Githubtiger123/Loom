@@ -1,5 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - https://github.com/kubeflow/community-distribution/common/istio/istio-namespace/base?ref=96e316a80e257a9f645c7c1ee0e1a94b904dead7
-  - https://github.com/kubeflow/community-distribution/common/istio/istio-crds/base?ref=96e316a80e257a9f645c7c1ee0e1a94b904dead7
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-namespace/base/namespace.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-namespace/base/default-allow-same-namespace.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-namespace/base/allow-istiod-control-plane.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-namespace/base/allow-istiod-webhook-apiserver.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-namespace/base/allow-knative-to-istio-gateways.yaml
+  - https://ghfast.top/https://raw.githubusercontent.com/kubeflow/community-distribution/96e316a80e257a9f645c7c1ee0e1a94b904dead7/common/istio/istio-crds/base/crd.yaml
+namespace: istio-system

@@ -10,7 +10,9 @@ import (
 
 // LogArchive is independent of KFP availability, so deleted runs remain readable.
 type LogArchive struct {
-	Enabled      bool     `yaml:"enabled"`
+	Enabled bool `yaml:"enabled"`
+	// argo lists only the authorized execution prefix; manifest keeps the legacy collector protocol.
+	Format       string   `yaml:"format"`
 	Endpoint     string   `yaml:"endpoint"`
 	Bucket       string   `yaml:"bucket"`
 	Prefix       string   `yaml:"prefix"`
@@ -24,6 +26,9 @@ type LogArchive struct {
 func (c LogArchive) Validate() error {
 	if !c.Enabled {
 		return nil
+	}
+	if c.Format != "" && c.Format != "manifest" && c.Format != "argo" {
+		return fmt.Errorf("log_archive.format 必须为 argo 或 manifest")
 	}
 	u, err := url.Parse(c.Endpoint)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil ||
