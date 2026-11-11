@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 只安装集群依赖；不安装本机软件、不删除资源、不发布 Loom API/web。
+# 安装集群依赖，并可选发布 Loom API/web/后台角色；不安装本机软件、不删除业务资源。
 set -euo pipefail
 INSTALL_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$INSTALL_DIR"
@@ -18,6 +18,8 @@ INSTALL_NOTEBOOK="${INSTALL_NOTEBOOK:-true}"
 INSTALL_PIPELINE="${INSTALL_PIPELINE:-false}"
 INSTALL_KSERVE="${INSTALL_KSERVE:-false}"
 INSTALL_TRAINER="${INSTALL_TRAINER:-false}"
+INSTALL_PLATFORM="${INSTALL_PLATFORM:-false}"
+PLATFORM_OVERLAY="${PLATFORM_OVERLAY:-core}"
 INSTALL_NOTEBOOK_GATEWAY="${INSTALL_NOTEBOOK_GATEWAY:-false}"
 ENABLE_POD_EXEC="${ENABLE_POD_EXEC:-false}"
 ENABLE_SPACE_DELETE="${ENABLE_SPACE_DELETE:-false}"
@@ -29,13 +31,17 @@ if [[ -z "$KUBE_CONTEXT" ]]; then
   echo '用法：bash install.sh <kubectl-context>' >&2
   exit 1
 fi
-for flag in "$INSTALL_CERT_MANAGER" "$INSTALL_ISTIO" "$INSTALL_PROFILES" "$INSTALL_NOTEBOOK" "$INSTALL_PIPELINE" "$INSTALL_KSERVE" "$INSTALL_TRAINER" \
+for flag in "$INSTALL_CERT_MANAGER" "$INSTALL_ISTIO" "$INSTALL_PROFILES" "$INSTALL_NOTEBOOK" "$INSTALL_PIPELINE" "$INSTALL_KSERVE" "$INSTALL_TRAINER" "$INSTALL_PLATFORM" \
   "$INSTALL_NOTEBOOK_GATEWAY" "$ENABLE_POD_EXEC" "$ENABLE_SPACE_DELETE"; do
   if [[ "$flag" != true && "$flag" != false ]]; then
     echo '安装开关只能填写 true 或 false。' >&2
     exit 1
   fi
 done
+case "$PLATFORM_OVERLAY" in
+  core|pipeline|kserve|full) ;;
+  *) echo 'PLATFORM_OVERLAY 只能填写 core、pipeline、kserve 或 full。' >&2; exit 1 ;;
+esac
 for tool in kubectl; do
   command -v "$tool" >/dev/null || { echo "缺少工具：$tool" >&2; exit 1; }
 done
@@ -48,6 +54,22 @@ if [[ "$INSTALL_PIPELINE" == true ]]; then
   if [[ ! -f manifests/pipeline/secrets.local.yaml ]] || \
     grep -qE '^[[:space:]]*(username|password|accesskey|secretkey):.*REPLACE_ME' manifests/pipeline/secrets.local.yaml; then
     echo '先复制 pipeline/secrets.example.yaml 为 secrets.local.yaml，填写真实凭据。' >&2
+    exit 1
+  fi
+fi
+if [[ "$INSTALL_PLATFORM" == true ]]; then
+  platform_config="kubernetes/loom/overlays/$PLATFORM_OVERLAY/config/config.local.yaml"
+  middleware_config="kubernetes/loom/components/middleware/config/middleware.env"
+  if [[ ! -f "$platform_config" ]] || grep -q 'REPLACE_ME' "$platform_config"; then
+    echo "先填写 $platform_config 中的数据库、身份和其他环境配置。" >&2
+    exit 1
+  fi
+  if [[ ! -f "$middleware_config" ]] || grep -q 'REPLACE_ME' "$middleware_config"; then
+    echo "先复制并填写 $middleware_config；数据库和 Redis 密码必须与 $platform_config 一致。" >&2
+    exit 1
+  fi
+  if grep -qE 'YOUR_REGISTRY|YOUR_TAG' "kubernetes/loom/overlays/$PLATFORM_OVERLAY/kustomization.yaml"; then
+    echo "先在 kubernetes/loom/overlays/$PLATFORM_OVERLAY/kustomization.yaml 填写已推送的 Loom 镜像地址与 tag。" >&2
     exit 1
   fi
 fi
@@ -125,34 +147,18 @@ if [[ "$INSTALL_PIPELINE" == true ]]; then
   "${KUBECTL[@]}" rollout status statefulset/minio -n kubeflow --timeout="$WAIT_TIMEOUT"
   apply_kustomization manifests/minio/bootstrap
   "${KUBECTL[@]}" wait --for=condition=Complete job/loom-minio-bootstrap-v4 -n kubeflow --timeout="$WAIT_TIMEOUT"
-  # 仅复制独立的日志/产物只读凭据给 API；不复制 root 或任务写入凭据。
-  "${KUBECTL[@]}" get secret minio-log-reader -n kubeflow -o 'go-template=apiVersion: v1
-kind: Secret
-metadata:
-  name: loom-log-archive
-  namespace: loom-system
-type: Opaque
-data:
-  accesskey: {{index .data "accesskey"}}
-  secretkey: {{index .data "secretkey"}}
-' | "${KUBECTL[@]}" apply -f -
-  "${KUBECTL[@]}" get secret minio-artifact-reader -n kubeflow -o 'go-template=apiVersion: v1
-kind: Secret
-metadata:
-  name: loom-artifact-store
-  namespace: loom-system
-type: Opaque
-data:
-  accesskey: {{index .data "accesskey"}}
-  secretkey: {{index .data "secretkey"}}
-' | "${KUBECTL[@]}" apply -f -
   apply_kustomization manifests/pipeline/base
   "${KUBECTL[@]}" wait --for=condition=Ready certificate/kfp-cache-cert -n kubeflow --timeout="$WAIT_TIMEOUT"
   "${KUBECTL[@]}" rollout status statefulset/metacontroller -n kubeflow --timeout="$WAIT_TIMEOUT"
   for deployment in mysql workflow-controller ml-pipeline metadata-grpc-deployment metadata-envoy-deployment cache-server kubeflow-pipelines-profile-controller; do
     "${KUBECTL[@]}" rollout status "deployment/$deployment" -n kubeflow --timeout="$WAIT_TIMEOUT"
   done
-  "${KUBECTL[@]}" apply -f manifests/pipeline-client-rbac.yaml -f manifests/pipeline-access.yaml
+  if [[ "$INSTALL_PLATFORM" == true ]]; then
+    # 平台 Kustomization 统一拥有 loom-pipeline SA/ClusterRole；这里只补 KFP/MLMD 访问策略。
+    "${KUBECTL[@]}" apply -f manifests/pipeline-access.yaml
+  else
+    "${KUBECTL[@]}" apply -f manifests/pipeline-client-rbac.yaml -f manifests/pipeline-access.yaml
+  fi
 fi
 
 if [[ "$INSTALL_KSERVE" == true ]]; then
@@ -186,7 +192,10 @@ if [[ "$INSTALL_TRAINER" == true ]]; then
 fi
 
 echo '8. Loom 执行器权限'
-"${KUBECTL[@]}" apply -f platform-worker-rbac.yaml
+if [[ "$INSTALL_PLATFORM" != true ]]; then
+  # 仅安装依赖时也从 Kubernetes 目录应用同一份机器身份，避免维护两套 RBAC。
+  "${KUBECTL[@]}" apply -f kubernetes/loom/base/rbac.yaml
+fi
 if [[ "$ENABLE_POD_EXEC" == true ]]; then
   "${KUBECTL[@]}" apply -f manifests/pod-exec-rbac.yaml
 fi
@@ -197,4 +206,29 @@ if [[ "$INSTALL_NOTEBOOK_GATEWAY" == true ]]; then
   "${KUBECTL[@]}" apply -f manifests/gateway/notebook.yaml
 fi
 
-echo '所选依赖已应用并完成上述就绪等待。Loom API/web、业务库初始化和访问链路仍需单独配置。'
+if [[ "$INSTALL_PLATFORM" == true ]]; then
+  echo "9. Loom 平台控制面（$PLATFORM_OVERLAY）"
+  apply_kustomization "kubernetes/loom/overlays/$PLATFORM_OVERLAY"
+
+  # 四个官方 overlay 都包含集群内 MySQL/Redis；先等待持久化中间件，再迁移业务库。
+  "${KUBECTL[@]}" rollout status statefulset/loom-mysql -n loom-system --timeout="$WAIT_TIMEOUT"
+  "${KUBECTL[@]}" rollout status statefulset/loom-redis -n loom-system --timeout="$WAIT_TIMEOUT"
+
+  # 迁移保持显式执行。CronJob 永久 suspend，只作为带 ConfigMap 文件的 Job 模板。
+  migration_job="loom-db-migrate-$(date -u +%Y%m%d%H%M%S)"
+  "${KUBECTL[@]}" create job --from=cronjob/loom-db-migrate "$migration_job" -n loom-system
+  "${KUBECTL[@]}" wait --for=condition=Complete "job/$migration_job" -n loom-system --timeout="$WAIT_TIMEOUT"
+
+  for deployment in loom-api loom-web loom-worker loom-sync loom-cron; do
+    "${KUBECTL[@]}" rollout status "deployment/$deployment" -n loom-system --timeout="$WAIT_TIMEOUT"
+  done
+  if [[ "$PLATFORM_OVERLAY" == pipeline || "$PLATFORM_OVERLAY" == full ]]; then
+    "${KUBECTL[@]}" rollout status deployment/loom-pipeline-worker -n loom-system --timeout="$WAIT_TIMEOUT"
+  fi
+  if [[ "$PLATFORM_OVERLAY" == kserve || "$PLATFORM_OVERLAY" == full ]]; then
+    "${KUBECTL[@]}" rollout status deployment/loom-kserve-worker -n loom-system --timeout="$WAIT_TIMEOUT"
+  fi
+  echo 'Loom 控制面已发布。外部 HTTPS/身份入口仍须按实际域名与认证模式配置。'
+else
+  echo '所选集群依赖已应用；INSTALL_PLATFORM=false，未发布 Loom API/web/后台角色。'
+fi

@@ -1,0 +1,27 @@
+# core + KFP pipeline-worker。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../../base
+components:
+- ../../components/middleware
+images:
+- name: loom-platform
+  newName: YOUR_REGISTRY/loom-platform
+  newTag: YOUR_TAG
+- name: loom-web
+  newName: YOUR_REGISTRY/loom-web
+  newTag: YOUR_TAG
+configMapGenerator:
+- name: loom-platform-config
+  behavior: merge
+  files:
+  - config.local.yaml=config/config.local.yaml
+patches:
+- target:
+    kind: Deployment
+    name: loom-pipeline-worker
+  patch: |-
+    - op: replace
+      path: /spec/replicas
+      value: 1

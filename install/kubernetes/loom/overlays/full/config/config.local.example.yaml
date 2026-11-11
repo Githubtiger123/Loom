@@ -1,0 +1,25 @@
+# 复制为 config.local.yaml 后填写；真实文件被 Git 忽略并完整进入 ConfigMap。
+db:
+  dsn: "loom:REPLACE_ME_DB_PASSWORD@tcp(loom-mysql:3306)/loom?parseTime=true&charset=utf8mb4&loc=UTC"
+redis:
+  enabled: true
+  addr: "loom-redis:6379"
+  password: "REPLACE_ME_REDIS_PASSWORD"
+identity:
+  issuer: "REPLACE_ME_IDENTITY_ISSUER"
+  trusted_proxy_cidrs: ["REPLACE_ME_TRUSTED_PROXY_CIDR"]
+auth:
+  enabled: false
+  signing_key: ""
+pipeline:
+  enabled: true
+kserve:
+  enabled: true
+log_archive:
+  enabled: false
+  access_key: ""
+  secret_key: ""
+artifact_store:
+  enabled: false
+  access_key: ""
+  secret_key: ""

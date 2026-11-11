@@ -20,7 +20,7 @@ patches:
         value: --executor-image
       - op: replace
         path: /spec/template/spec/containers/0/args/3
-        value: quay.1ms.run/argoproj/argoexec:v4.1.6
+        value: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/argoexec:v4.1.6
     target:
       group: apps
       version: v1
@@ -41,9 +41,9 @@ patches:
               - name: ml-pipeline-api-server
                 env:
                   - name: V2_DRIVER_IMAGE
-                    value: ghcr.m.daocloud.io/kubeflow/kfp-driver:2.18.0
+                    value: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/kfp-driver:2.18.0
                   - name: V2_LAUNCHER_IMAGE
-                    value: ghcr.m.daocloud.io/kubeflow/kfp-launcher:2.18.0
+                    value: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/kfp-launcher:2.18.0
   # 排除官方 SeaweedFS；不 prune、不删除已存在的旧实例或 PVC。
   - patch: |-
       $patch: delete

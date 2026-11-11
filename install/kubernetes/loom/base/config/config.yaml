@@ -1,0 +1,119 @@
+# Kubernetes 公共基线。环境差异和凭据写入 overlay 的 config.local.yaml。
+server:
+  addr: ":8080"
+  read_timeout: 15s
+  write_timeout: 60s
+  shutdown_timeout: 10s
+
+db:
+  dsn: ""
+  max_open: 50
+  max_idle: 10
+  conn_max_lifetime: 30m
+  conn_max_idle_time: 10m
+  ping_timeout: 3s
+
+redis:
+  enabled: false
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+  dial_timeout: 2s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_size: 20
+
+mq:
+  enabled: false
+  url: "amqp://guest:guest@127.0.0.1:5672/"
+  exchange: loom
+  prefetch: 10
+
+k8s:
+  cluster: default
+  infrastructure_owner: admin
+  kubeconfig: ""
+  quota_name: kf-resource-quota
+  editor_service_account: default-editor
+
+istio:
+  ingress_principal: "cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"
+  kfp_ui_principal: "cluster.local/ns/kubeflow/sa/ml-pipeline-ui"
+
+identity:
+  issuer: ""
+  subject_header: oidc-sub
+  trusted_proxy_cidrs: ["127.0.0.1/32", "::1/128"]
+  userid_header: kubeflow-userid
+  userid_prefix: ""
+
+auth:
+  enabled: false
+  issuer: ""
+  audience: loom-api
+  public_origin: ""
+  notebook_origin: ""
+  signing_key: ""
+  access_ttl: 15m
+  session_ttl: 360h
+
+images:
+  path: /app/configs/images.yaml
+
+pipeline:
+  enabled: false
+  endpoint: "http://ml-pipeline.kubeflow.svc.cluster.local:8888"
+  metadata_endpoint: "http://metadata-envoy-service.kubeflow.svc.cluster.local:9090"
+  metadata_token_file: ""
+  token_file: /var/run/secrets/kfp/token
+  service_account: default-editor
+  pipeline_root: "s3://mlpipeline/loom/pipelines"
+  timeout: 15s
+  poll_interval: 15s
+  sync_interval: 5s
+  terminal_sync_interval: 5m
+  sync_concurrency: 2
+  sync_qps: 10
+
+kserve:
+  enabled: false
+  service_account: default-editor
+  deployment_mode: Standard
+  poll_interval: 10s
+  resync_interval: 5m
+  sync_concurrency: 2
+  sync_qps: 10
+
+executor:
+  enabled: false
+  addr: ":8444"
+  server_cert: ""
+  server_key: ""
+  client_ca: ""
+  client_cert_sha256: []
+
+log_archive:
+  enabled: false
+  format: argo
+  endpoint: "http://minio.kubeflow.svc.cluster.local:9000"
+  bucket: mlpipeline
+  prefix: logs
+  region: us-east-1
+  access_key: ""
+  secret_key: ""
+  session_token: ""
+  timeout: 15s
+
+artifact_store:
+  enabled: false
+  endpoint: "http://minio.kubeflow.svc.cluster.local:9000"
+  bucket: mlpipeline
+  prefix: loom/pipelines
+  region: us-east-1
+  access_key: ""
+  secret_key: ""
+  session_token: ""
+  timeout: 15s
+
+log:
+  level: info

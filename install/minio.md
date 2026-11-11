@@ -36,7 +36,7 @@ MinIO/mc 地址与版本由 `manifests/registry/kustomization.yaml` 维护。Min
 | minio-log-reader（kubeflow） | 只读 mlpipeline/logs/*，包含受前缀限制的 ListBucket |
 | minio-artifact-reader（kubeflow） | 只读 mlpipeline/loom/pipelines/* 的精确对象，不允许列目录或写入 |
 
-脚本将日志只读凭据复制为 loom-system 的 loom-log-archive，产物只读凭据复制为 loom-artifact-store，复制过程不打印凭据。API Deployment 分别合并 `examples/log-archive-api-pod-spec.yaml`、`examples/artifact-store-api-pod-spec.yaml`，Pod label 使用 `app: loom-api`，再启用相应读取功能。root 凭据不得代替只读账号。
+Loom 采用与 Cube 一致的完整配置文件模式：把日志只读账号写入所选 overlay 的 `log_archive.access_key/secret_key`，把产物只读账号写入 `artifact_store.access_key/secret_key`，随 `config.local.yaml` 一起生成 ConfigMap。不要把 root、KFP 写入账号或空间任务账号填给 Loom API；也不要提交含真实凭据的配置或公开 Kustomize 渲染结果。
 
 每个开启 pipelines 标签的 namespace，由 webhook 通过 MinIO admin 管理独立账号及策略。账号名由 namespace 派生，密码绑定 namespace UID；同名空间重建会使旧密码失效。任务只能访问自己的 `private-artifacts/<namespace>/*`、`loom/pipelines/<namespace>/*`、`logs/default/<namespace>/*`。`kfp-launcher.providers` 明确配置 S3/minio endpoint 和本空间 Secret，不沿用官方代码里的 SeaweedFS 默认地址。
 

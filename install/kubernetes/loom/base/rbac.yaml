@@ -1,25 +1,55 @@
-# 执行器、只读观察器与 API 分离；由 install 脚本在创建 namespace 后应用。
-# 这些是跨空间机器权限；用户权限、对象归属仍由 Loom 检查。
+# 平台角色按 API、执行、观测和定时任务拆分。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-api
+  namespace: loom-system
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: loom-worker
   namespace: loom-system
-automountServiceAccountToken: true
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: loom-sync
   namespace: loom-system
-automountServiceAccountToken: true
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: loom-api
+  name: loom-cron
   namespace: loom-system
-automountServiceAccountToken: true
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-web
+  namespace: loom-system
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-migrate
+  namespace: loom-system
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-pipeline
+  namespace: loom-system
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-kserve
+  namespace: loom-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -64,13 +94,19 @@ roleRef:
   name: loom-resource-reader
 subjects:
   - kind: ServiceAccount
+    name: loom-api
+    namespace: loom-system
+  - kind: ServiceAccount
     name: loom-worker
     namespace: loom-system
   - kind: ServiceAccount
     name: loom-sync
     namespace: loom-system
   - kind: ServiceAccount
-    name: loom-api
+    name: loom-kserve
+    namespace: loom-system
+  - kind: ServiceAccount
+    name: loom-pipeline
     namespace: loom-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -117,12 +153,61 @@ subjects:
     name: loom-worker
     namespace: loom-system
 ---
-# kserve-worker 独立身份，不授予 Profile/PVC 写权限。
-apiVersion: v1
-kind: ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
 metadata:
-  name: loom-kserve
-  namespace: loom-system
+  name: loom-pod-log-reader
+rules:
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-pod-log-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-pod-log-reader
+subjects:
+  - kind: ServiceAccount
+    name: loom-api
+    namespace: loom-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: loom-pipeline-client
+rules:
+  - apiGroups: [pipelines.kubeflow.org]
+    resources: [pipelines, pipelineversions, experiments, runs]
+    verbs: [get, list, create, update, delete, terminate, archive, unarchive, readArtifact, readLog]
+  - apiGroups: [""]
+    resources: [pods, events, namespaces, persistentvolumeclaims]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-pipeline-client
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-pipeline-client
+subjects:
+  - kind: ServiceAccount
+    name: loom-pipeline
+    namespace: loom-system
+  - kind: ServiceAccount
+    name: loom-api
+    namespace: loom-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -144,39 +229,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: loom-kserve
-    namespace: loom-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: loom-kserve-reader
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: loom-resource-reader
-subjects:
-  - kind: ServiceAccount
-    name: loom-kserve
-    namespace: loom-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: loom-pod-log-reader
-rules:
-  - apiGroups: [""]
-    resources: [pods/log]
-    verbs: [get]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: loom-pod-log-reader
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: loom-pod-log-reader
-subjects:
-  - kind: ServiceAccount
-    name: loom-api
     namespace: loom-system

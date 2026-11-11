@@ -1,0 +1,202 @@
+name: loom
+
+x-platform-build: &platform-build
+  context: ../..
+  dockerfile: install/docker/Dockerfile
+  target: development
+
+x-platform-environment: &platform-environment
+  LOOM_DB_DSN: "loom:loom@tcp(mysql:3306)/loom?parseTime=true&charset=utf8mb4&loc=UTC"
+  LOOM_REDIS_ENABLED: "true"
+  LOOM_REDIS_ADDR: redis:6379
+  LOOM_REDIS_PASSWORD: ""
+  LOOM_MQ_ENABLED: "false"
+  LOOM_K8S_KUBECONFIG: /root/.kube/config
+  LOOM_K8S_CLUSTER: docker-dev
+  LOOM_K8S_INFRASTRUCTURE_OWNER: admin
+  LOOM_AUTH_ENABLED: "true"
+  LOOM_AUTH_ISSUER: https://loom.local
+  LOOM_AUTH_PUBLIC_ORIGIN: ${LOOM_AUTH_PUBLIC_ORIGIN:-https://127.0.0.1:5173}
+  LOOM_AUTH_SIGNING_KEY: ${LOOM_AUTH_SIGNING_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+  LOOM_IMAGES_PATH: configs/images.yaml
+  LOOM_LOG_LEVEL: debug
+
+x-platform-service: &platform-service
+  build: *platform-build
+  working_dir: /workspace/platform
+  environment: *platform-environment
+  volumes:
+  - ../../platform:/workspace/platform
+  - go-mod-cache:/go/pkg/mod
+  - go-build-cache:/root/.cache/go-build
+  - type: bind
+    source: ${KUBECONFIG_PATH:-./kubeconfig}
+    target: /root/.kube/config
+    read_only: true
+  restart: unless-stopped
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: loom
+      MYSQL_USER: loom
+      MYSQL_PASSWORD: loom
+      TZ: Asia/Shanghai
+    command:
+    - --character-set-server=utf8mb4
+    - --collation-server=utf8mb4_0900_ai_ci
+    - --default-time-zone=+08:00
+    - --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO
+    ports:
+    - ${MYSQL_PORT:-3306}:3306
+    volumes:
+    - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1, -uroot, -proot]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: [redis-server, --appendonly, "yes", --maxmemory, 256mb, --maxmemory-policy, allkeys-lru]
+    ports:
+    - ${REDIS_PORT:-6379}:6379
+    volumes:
+    - ./data/redis:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  rabbitmq:
+    profiles: [mq]
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: loom
+      RABBITMQ_DEFAULT_PASS: loom
+      RABBITMQ_DEFAULT_VHOST: /loom
+    ports:
+    - 5672:5672
+    - 15672:15672
+    volumes:
+    - ./data/rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    <<: *platform-service
+    command: [go, run, ./cmd/platform, -config=configs/config.yaml, -cmd=migrate]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *platform-service
+    command: [air, -c, /etc/loom/air.toml, --, -config=configs/config.yaml, -cmd=api]
+    ports:
+    - ${API_PORT:-8080}:8080
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build:
+      context: ../..
+      dockerfile: install/docker/dockerFrontend/Dockerfile
+      target: development
+    working_dir: /workspace/web
+    command: [npm, run, dev, --, --host, 0.0.0.0]
+    environment:
+      LOOM_API_PROXY_TARGET: http://api:8080
+      VITE_AUTH_MODE: local
+    volumes:
+    - ../../web:/workspace/web
+    - web-node-modules:/workspace/web/node_modules
+    ports:
+    - ${WEB_PORT:-5173}:5173
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  worker:
+    <<: *platform-service
+    profiles: [cluster]
+    command: [air, -c, /etc/loom/air.toml, --, -config=configs/config.yaml, -cmd=worker, -worker-concurrency=4]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  sync:
+    <<: *platform-service
+    profiles: [cluster]
+    command: [air, -c, /etc/loom/air.toml, --, -config=configs/config.yaml, -cmd=sync]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  cron:
+    <<: *platform-service
+    command: [air, -c, /etc/loom/air.toml, --, -config=configs/config.yaml, -cmd=cron]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  pipeline-worker:
+    <<: *platform-service
+    profiles: [pipeline]
+    command: [air, -c, /etc/loom/air.toml, --, -config=configs/config.yaml, -cmd=pipeline-worker, -worker-concurrency=4]
+    environment:
+      <<: *platform-environment
+      LOOM_PIPELINE_ENABLED: "true"
+      LOOM_PIPELINE_TOKEN_FILE: /var/run/secrets/kfp/token
+    volumes:
+    - ../../platform:/workspace/platform
+    - go-mod-cache:/go/pkg/mod
+    - go-build-cache:/root/.cache/go-build
+    - type: bind
+      source: ${KUBECONFIG_PATH:-./kubeconfig}
+      target: /root/.kube/config
+      read_only: true
+    - type: bind
+      source: ${KFP_TOKEN_PATH:-./kfp-token}
+      target: /var/run/secrets/kfp/token
+      read_only: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  kserve-worker:
+    <<: *platform-service
+    profiles: [kserve]
+    command: [air, -c, /etc/loom/air.toml, --, -config=configs/config.yaml, -cmd=kserve-worker, -worker-concurrency=4]
+    environment:
+      <<: *platform-environment
+      LOOM_KSERVE_ENABLED: "true"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  web-node-modules:

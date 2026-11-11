@@ -3,3 +3,25 @@ kind: Kustomization
 resources:
   # 使用官方带固定镜像版本的目录，不创建示例 TrainJob，不自动分配 GPU。
   - ../../upstream/community-distribution/applications/trainer/upstream/overlays/runtimes
+images:
+  - name: ghcr.io/kubeflow/trainer/torchtune-trainer
+    newName: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/torchtune-trainer
+    newTag: v2.3.0
+  - name: ghcr.io/kubeflow/trainer/dataset-initializer
+    newName: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/dataset-initializer
+    newTag: v2.3.0
+  - name: ghcr.io/kubeflow/trainer/model-initializer
+    newName: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/model-initializer
+    newTag: v2.3.0
+  - name: ghcr.io/kubeflow/trainer/mlx-runtime
+    newName: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/mlx-runtime
+    newTag: v2.3.0
+  - name: ghcr.io/kubeflow/trainer/deepspeed-runtime
+    newName: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/deepspeed-runtime
+    newTag: v2.3.0
+  - name: ghcr.io/kubeflow/trainer/xgboost-runtime
+    newName: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/xgboost-runtime
+    newTag: v2.3.0
+  - name: nvcr.io/nvidia/jax
+    newName: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jax
+    newTag: 25.10-py3

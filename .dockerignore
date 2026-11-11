@@ -1,0 +1,15 @@
+.git
+.loom-npm-cache
+platform/bin
+platform/*.exe
+platform/configs/config.local.yaml
+web/node_modules
+web/dist
+web/.env.local
+web/certs
+install/docker/.env
+install/docker/kubeconfig
+install/docker/data
+install/manifests/pipeline/secrets.local.yaml
+install/kubernetes/loom/overlays/*/config/config.local.yaml
+install/kubernetes/loom/components/middleware/config/middleware.env

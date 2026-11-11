@@ -1,0 +1,8 @@
+# Loom 自身控制面 namespace；不承载用户工作负载。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: loom-system
+  labels:
+    istio-injection: enabled
+    pod-security.kubernetes.io/enforce: baseline

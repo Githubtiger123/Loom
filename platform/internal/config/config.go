@@ -4,7 +4,8 @@
 //
 //	代码默认值  <  config.yaml  <  config.local.yaml  <  环境变量  <  命令行 flag
 //
-// 敏感信息（MySQL 密码、私仓凭证）只放环境变量/Secret，不写进仓库里的 yaml。
+// 配置既可由 YAML 提供，也可由环境变量覆盖。部署清单当前按 Cube 的方式将完整 YAML
+// 生成 ConfigMap，因此含凭据的 config.local.yaml 不应提交到公共仓库或公开渲染结果。
 package config
 
 import (
@@ -46,7 +47,7 @@ type Server struct {
 	ShutdownTimeout Duration `yaml:"shutdown_timeout"`
 }
 
-// DB 是 MySQL 参数。DSN 通常由环境变量注入。
+// DB 是 MySQL 参数。DSN 可由环境 YAML 或环境变量提供。
 type DB struct {
 	DSN             string   `yaml:"dsn"`
 	MaxOpen         int      `yaml:"max_open"`
@@ -114,7 +115,7 @@ type Auth struct {
 	Audience       string   `yaml:"audience"`
 	PublicOrigin   string   `yaml:"public_origin"`
 	NotebookOrigin string   `yaml:"notebook_origin"` // 可选独立 Notebook HTTPS 来源，不共享平台 Refresh Cookie。
-	SigningKey     string   `yaml:"signing_key"`     // 至少 32 字节随机值的标准 Base64，只从 Secret 注入。
+	SigningKey     string   `yaml:"signing_key"`     // 至少 32 字节随机值的标准 Base64。
 	AccessTTL      Duration `yaml:"access_ttl"`
 	SessionTTL     Duration `yaml:"session_ttl"`
 }

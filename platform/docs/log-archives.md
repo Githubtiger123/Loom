@@ -31,7 +31,7 @@ log_archive:
   timeout: 15s
 ```
 
-凭据通过 Secret 注入 `LOOM_LOG_ARCHIVE_ACCESS_KEY`、`LOOM_LOG_ARCHIVE_SECRET_KEY`；安装器已将专用只读账号复制为 loom-system/loom-log-archive，合并 `install/examples/log-archive-api-pod-spec.yaml` 到 API Pod。临时凭据可另传 `LOOM_LOG_ARCHIVE_SESSION_TOKEN`。凭据在进程启动时读取，轮换后重启 API。其余覆盖变量为 `LOOM_LOG_ARCHIVE_ENABLED/FORMAT/ENDPOINT/BUCKET/PREFIX/REGION/TIMEOUT`。私有 CA 使用系统信任，不提供跳过 TLS 校验选项。format 未指定时保持旧 manifest 行为；默认示例文件已改为 argo，enabled 仍关闭以免未注入凭据时启动失败。
+Kubernetes 部署把专用只读账号填写在所选 overlay 的 `config/config.local.yaml`，字段为 `log_archive.access_key/secret_key`，并与完整配置一起生成 ConfigMap。临时凭据可填写 `session_token`；环境变量 `LOOM_LOG_ARCHIVE_*` 仍可用于 Docker 开发时覆盖。配置在进程启动时读取，轮换后由 ConfigMap 内容哈希触发 Deployment rollout。私有 CA 使用系统信任，不提供跳过 TLS 校验选项。format 未指定时保持旧 manifest 行为；默认 enabled 仍关闭，未填写凭据时不要启用。
 
 argo 模式 API 需要日志前缀内 `s3:ListBucket` 和 `s3:GetObject`（包括 HEAD），manifest 模式只需 GetObject；两种模式都不需要 PutObject/DeleteObject/建桶/admin 权限。任务只获本空间前缀的读写身份，不发 root。API 不创建桶、不上传、不扫描整个桶，不向客户端发凭据、原始 key 或签名链接。存储过期清理由运维配置生命周期策略，与业务软删除独立。
 

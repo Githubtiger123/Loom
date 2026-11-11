@@ -37,7 +37,7 @@ func (c LogArchive) Validate() error {
 	}
 	if !validator.IsDNS1123Label(c.Bucket) || len(c.Bucket) < 3 || !validator.IsArchivePath(c.Prefix) ||
 		!validator.IsArchiveSegment(c.Region) || c.AccessKey == "" || c.SecretKey == "" {
-		return fmt.Errorf("log_archive 需配置 bucket、相对 prefix、region 以及 Secret 注入的 access_key/secret_key")
+		return fmt.Errorf("log_archive 需配置 bucket、相对 prefix、region 以及 access_key/secret_key")
 	}
 	if c.Timeout.Std() < time.Second || c.Timeout.Std() > 30*time.Second {
 		return fmt.Errorf("log_archive.timeout 必须在 1s–30s 之间")

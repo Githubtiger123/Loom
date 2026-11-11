@@ -1,0 +1,10 @@
+# Docker Compose dependencies
+docker.io/library/mysql:8.4
+docker.io/library/redis:7.4-alpine
+docker.io/library/rabbitmq:4.1-management
+
+# Docker build/runtime base images
+docker.io/library/golang:1.26.0-alpine
+gcr.io/distroless/static-debian12:nonroot
+docker.io/library/node:22.12.0-alpine
+docker.io/nginxinc/nginx-unprivileged:1.29-alpine

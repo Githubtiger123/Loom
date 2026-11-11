@@ -73,7 +73,7 @@ identity:
   userid_prefix: ""
 
 # 本地认证显式开启，不与外部身份头同时放行。这里只给默认值，不含任何密钥。
-# 启用前设置真实的 issuer/public_origin，并从 Secret 注入 LOOM_AUTH_SIGNING_KEY。
+# 启用前设置真实的 issuer/public_origin/signing_key；不要提交含真实密钥的环境配置。
 # 已有外部身份不会因 issuer 相同邮箱或用户名而自动迁移成本地用户。
 auth:
   enabled: false

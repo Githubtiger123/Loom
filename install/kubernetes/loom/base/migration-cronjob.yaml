@@ -1,0 +1,44 @@
+# 仅作为显式迁移 Job 的模板；suspend=true，不会自行定时执行或跟随 Pod 启动。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: loom-db-migrate
+spec:
+  schedule: "0 0 1 1 *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: loom-db-migrate
+            app.kubernetes.io/part-of: loom
+        spec:
+          restartPolicy: Never
+          serviceAccountName: loom-migrate
+          containers:
+          - name: migrate
+            image: loom-platform:dev
+            imagePullPolicy: IfNotPresent
+            args: ["-config=/app/configs/config.yaml", "-cmd=migrate"]
+            resources:
+              requests: {cpu: 50m, memory: 64Mi}
+              limits: {memory: 256Mi}
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+              capabilities:
+                drop: [ALL]
+            volumeMounts:
+            - name: platform-config
+              mountPath: /app/configs
+              readOnly: true
+          volumes:
+          - name: platform-config
+            configMap:
+              name: loom-platform-config

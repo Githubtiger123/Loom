@@ -1,0 +1,42 @@
+# cert-manager v1.21.2
+quay.io/jetstack/cert-manager-controller:v1.21.2
+quay.io/jetstack/cert-manager-cainjector:v1.21.2
+quay.io/jetstack/cert-manager-webhook:v1.21.2
+
+# Istio 1.31.3
+docker.io/istio/install-cni:1.31.3
+docker.io/istio/proxyv2:1.31.3
+docker.io/istio/pilot:1.31.3
+
+# Kubeflow Profile / Notebook controllers
+ghcr.io/kubeflow/dashboard/profile-controller:v2.0.1
+ghcr.io/kubeflow/notebooks/notebook-controller:v1.11.1
+
+# Kubeflow Pipelines 2.18.0
+ghcr.io/kubeflow/kfp-api-server:2.18.0
+ghcr.io/kubeflow/kfp-cache-server:2.18.0
+ghcr.io/kubeflow/kfp-frontend:2.18.0
+ghcr.io/kubeflow/kfp-persistence-agent:2.18.0
+ghcr.io/kubeflow/kfp-scheduled-workflow-controller:2.18.0
+ghcr.io/kubeflow/kfp-viewer-crd-controller:2.18.0
+ghcr.io/kubeflow/kfp-visualization-server:2.18.0
+ghcr.io/kubeflow/kfp-metadata-writer:2.18.0
+ghcr.io/kubeflow/kfp-metadata-envoy:2.18.0
+ghcr.io/metacontroller/metacontroller:v4.17.6
+gcr.io/tfx-oss-public/ml_metadata_store_server:1.14.0
+quay.io/argoproj/workflow-controller:v4.1.6
+quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+docker.io/library/mysql:8.4
+docker.io/library/alpine:3.23
+docker.io/alpine/k8s:1.37.1
+
+# KServe v0.21.0 Standard mode controllers
+docker.io/kserve/kserve-controller:v0.21.0
+docker.io/kserve/kserve-localmodel-controller:v0.21.0
+docker.io/kserve/llmisvc-controller:v0.21.0
+quay.io/brancz/kube-rbac-proxy:v0.18.0
+
+# Kubeflow Trainer v2.3.0 / JobSet v0.12.0 controllers
+ghcr.io/kubeflow/trainer/trainer-controller-manager:v2.3.0
+registry.k8s.io/jobset/jobset:v0.12.0

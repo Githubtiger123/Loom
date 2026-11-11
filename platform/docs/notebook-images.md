@@ -17,7 +17,7 @@ images:
     category: vscode
     name: VS Code · Python
     serverType: group-one
-    image: ghcr.io/kubeflow/kubeflow/notebook-servers/codeserver-python:v1.11.1
+    image: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/codeserver-python:v1.11.1
     enabled: true
 ```
 

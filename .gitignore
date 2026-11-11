@@ -23,6 +23,13 @@ install/.state/
 install/.venv/
 install/scripts/__pycache__/
 install/manifests/pipeline/secrets.local.yaml
+install/docker/.env
+install/docker/kubeconfig
+install/docker/kfp-token
+install/docker/data/
+# Kubernetes 环境覆盖包含凭据；只提交同目录的 config.local.example.yaml。
+install/kubernetes/loom/overlays/*/config/config.local.yaml
+install/kubernetes/loom/components/middleware/config/middleware.env
 
 # IDE
 .idea/

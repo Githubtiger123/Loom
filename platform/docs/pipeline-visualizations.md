@@ -77,7 +77,7 @@ KFP 数据集/模型预览只支持生产者明确声明的固定位置：v1 `{v
 
 ## MinIO 配置
 
-产物使用独立的 `minio-artifact-reader` 只读账号，权限限定为 `mlpipeline/loom/pipelines/*`，与 Argo 日志账号、KFP 写入账号和 root 账号分离。API 注入 `LOOM_ARTIFACT_STORE_*` 环境变量，配置样例见 `install/examples/artifact-store-api-pod-spec.yaml`。普通指标只依赖 MLMD；没有启用产物存储时仍可读取指标。
+产物使用独立的 `minio-artifact-reader` 只读账号，权限限定为 `mlpipeline/loom/pipelines/*`，与 Argo 日志账号、KFP 写入账号和 root 账号分离。Kubernetes 部署把凭据填写在所选 overlay 的 `artifact_store.access_key/secret_key`，随完整 `config.local.yaml` 生成 ConfigMap；Docker 开发仍可用 `LOOM_ARTIFACT_STORE_*` 环境变量覆盖。普通指标只依赖 MLMD；没有启用产物存储时仍可读取指标。
 
 `artifact_store` 配置在 `platform/configs/config.yaml`，默认关闭。启用 `pipeline`、配置好 `metadata_endpoint`，再按部署样例为 API 打开 `artifact_store.enabled` 并注入凭据。修改桶或 pipeline root 时，需同步配置 `artifact_store.bucket/prefix` 和 `install/manifests/minio/bootstrap/artifacts-policy.json` 的权限范围。
 

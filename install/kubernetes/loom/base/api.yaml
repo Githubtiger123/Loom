@@ -1,0 +1,82 @@
+# Loom 业务 API 与集群内 Service。
+apiVersion: v1
+kind: Service
+metadata:
+  name: loom-api
+spec:
+  selector:
+    app.kubernetes.io/name: loom-api
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loom-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loom-api
+  template:
+    metadata:
+      labels:
+        app: loom-api
+        app.kubernetes.io/name: loom-api
+        app.kubernetes.io/part-of: loom
+    spec:
+      serviceAccountName: loom-api
+      containers:
+      - name: api
+        image: loom-platform:dev
+        imagePullPolicy: IfNotPresent
+        args: ["-config=/app/configs/config.yaml", "-cmd=api"]
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            memory: 512Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop: [ALL]
+        volumeMounts:
+        - name: platform-config
+          mountPath: /app/configs
+          readOnly: true
+        - name: kfp-token
+          mountPath: /var/run/secrets/kfp
+          readOnly: true
+      volumes:
+      - name: platform-config
+        configMap:
+          name: loom-platform-config
+      - name: kfp-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              audience: pipelines.kubeflow.org
+              expirationSeconds: 3600

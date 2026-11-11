@@ -2,6 +2,8 @@
 
 和 Cube 一样，入口就是一个 [install.sh](install.sh)：按顺序直接 apply 资源、等待必要的 CRD 和控制器就绪。没有 Python/PyYAML、YAML 解析器、安装计划生成或自定义安装框架。
 
+脚本现在也可选发布 Loom 自身控制面。设置 `INSTALL_PLATFORM=true` 后，会通过 [Loom Kustomize 清单](kubernetes/loom/README.md) 将专用 MySQL、Redis、web、API、worker、sync、cron 和所选 ML worker 部署到独立的 `loom-system`，等待中间件后显式运行一次数据库迁移并等待 rollout；默认仍为 false，不会意外发布应用。镜像构建与本地源码映射开发见 [docker/README.md](docker/README.md)。
+
 这里只编写、静态审阅了文件，**没有运行脚本、Kustomize 渲染、测试、编译或连接集群**。安装成功也不代表业务、浏览器和权限隔离已通过真实集成验证。
 
 ## 使用
@@ -65,6 +67,8 @@ INSTALL_TRAINER=true bash install.sh YOUR_KUBECTL_CONTEXT
 | INSTALL_PIPELINE | false | 安装 KFP 及 Argo、MySQL、MLMD、MinIO |
 | INSTALL_KSERVE | false | 安装 Standard 模式 KServe，不装 Knative |
 | INSTALL_TRAINER | false | 安装 Trainer v2.3.0、JobSet v0.12.0 和官方训练运行时 |
+| INSTALL_PLATFORM | false | 配置准备后，发布 Loom MySQL/Redis、web/API 和后台角色 |
+| PLATFORM_OVERLAY | core | `core`、`pipeline`、`kserve` 或 `full` |
 | INSTALL_NOTEBOOK_GATEWAY | false | 应用可选 Notebook HTTPS 与 Loom ext_authz 配置 |
 | ENABLE_POD_EXEC | false | 授予 API 在线终端权限 |
 | ENABLE_SPACE_DELETE | false | 授予 worker 安全删除空间所需的全 API list 权限 |
@@ -90,20 +94,20 @@ INSTALL_TRAINER=true bash install.sh YOUR_KUBECTL_CONTEXT
 
 初始化 Job 仍名为 `loom-minio-bootstrap-v4`；集群已有旧 Job 时，因 Pod 模板不可变，必须在确认旧初始化任务已停止后删除并重建该 Job，不能只 apply 新镜像。删除该 Job 不删除 MinIO StatefulSet 或 PVC；本次未执行任何集群操作。
 
-另外，KFP 运行任务所用的 driver/launcher 已按用户指定改为 DaoCloud 地址，版本保持 `2.18.0`：
+KFP 后续运行任务所用的 driver/launcher 已改为用户上传的阿里云一级仓库，版本保持 `2.18.0`：
 
 ```text
-ghcr.m.daocloud.io/kubeflow/kfp-driver:2.18.0
-ghcr.m.daocloud.io/kubeflow/kfp-launcher:2.18.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/kfp-driver:2.18.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/kfp-launcher:2.18.0
 ```
 
 这两个引用通过 [pipeline/base/kustomization.yaml](manifests/pipeline/base/kustomization.yaml) 补丁设置 API Server 的 `V2_DRIVER_IMAGE`、`V2_LAUNCHER_IMAGE`，不是普通容器 `image` 字段。用户日志显示已开始下载层，尚未展示完整拉取成功结果；未确认服务器 containerd 可达。更新安装配置只影响后续按新配置生成的任务，不重写已有 Workflow/Pod 的镜像。
 
-另外按用户提供的拉取进展替换以下三个平台依赖，版本 tag 不变：
+Argo executor 也使用用户上传的阿里云一级仓库；BusyBox 与缓存 Alpine 暂时保持原配置：
 
 ```text
 ghcr.1ms.run/containerd/busybox:1.28
-quay.1ms.run/argoproj/argoexec:v4.1.6
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/argoexec:v4.1.6
 docker.1ms.run/library/alpine:3.23.7
 ```
 
@@ -111,7 +115,7 @@ BusyBox 位于 Istio `grpc-simple` 注入模板的文本内部，普通镜像映
 
 上传更新后的安装目录再 apply 对应组件才会影响集群；本轮未执行安装或重启。用户输出显示这三个镜像已开始拉取，不等于完整下载和集群运行均已验证。已有 Workflow/Pod 不会被自动重写。Pipeline 已运行时，ConfigMap 中的缓存镜像会作为 cache-server 环境变量在启动时读取，更新 ConfigMap 后需在合适窗口手动重启 `kubeflow/cache-server` Deployment 才能更新该进程的值。
 
-不更改已装好的 cert-manager 或 Istio 控制面/CNI 镜像，不批量迁移其他 Docker Hub 镜像，也不假设 Notebook 镜像和训练/推理运行时已上传。当前不是全离线运行配置。
+不更改已装好的 cert-manager 或 Istio 控制面/CNI 镜像，也不批量迁移未提供的 Docker Hub 镜像。已上传的 Notebook、Trainer、Triton 和 llm-d 运行时按 `prepull/workload-images.txt` 使用阿里云地址；当前仍不是全离线运行配置。
 
 当前这批公开镜像直接拉取，不需要阿里云登录、服务器 `docker pull`、改回原标签或 `ctr import`。所有组件均已移除对 `aliyun-registry` 的强制引用，脚本不再读取 Docker 登录配置或创建镜像仓库 Secret；旧的 `IMAGE_PULL_SECRET_FILE` / `IMAGE_PULL_SECRET_NAME` 本地选项不再使用。旧集群中的仓库 Secret 不会被自动删除，若要停用凭据应由管理员另行处理。Pipeline 的 MySQL/MinIO 业务凭据仍必须配置，不能把取消仓库登录误认为取消数据库/S3 鉴权。
 
@@ -137,6 +141,8 @@ bash install.sh default
 
 | 资源目录 | 内容 | 版本 |
 |---|---|---|
+| docker | 本地 Compose、源码映射开发、后端/前端生产镜像 | Loom 源码版本 |
+| kubernetes/loom | Loom web/API/worker 控制面 Kustomize | Loom 源码版本 |
 | manifests/cert-manager | 证书控制器 | 1.21.2 |
 | manifests/istio | CRD、控制面、CNI、入口策略 | 1.31.3 |
 | manifests/roles | Kubeflow 与 Istio 聚合角色 | 同锁定快照 |
@@ -201,7 +207,7 @@ KFP/MinIO 的 Secret 不采用上游空密码和 minio/minio123。先准备 secr
 
 **已有 MySQL/PVC 时必须沿用原密码**。apply Secret 不等于修改数据库内部密码；脚本不再帮你生成、比较或轮换凭据。妥善限制本地文件权限并备份，不开 bash -x，不公开失败 patch/Secret。旧安装器留下的 .state/.generated 不会被清理，若已有凭据应安全迁移，不能重新填另一套密码。
 
-机器身份在 platform-worker-rbac.yaml 和 manifests/*-rbac.yaml：
+机器身份在 `kubernetes/loom/base/rbac.yaml` 和 `manifests/*-rbac.yaml`：
 
 | 角色 | ServiceAccount |
 |---|---|
@@ -231,7 +237,7 @@ kserve:
   deployment_mode: Standard
 ```
 
-KFP 仍保留自己的执行数据库，不合并 Loom/KFP schema。安装适配排除官方 SeaweedFS，统一使用 MinIO；部署顺序为 Secret → MinIO/PVC → 桶和账号初始化 → KFP/Argo。Argo archiveLogs 默认开启并按执行 UUID 归档，Loom 的 argo 模式直接读取，不再要求额外 manifest。API 需合并 examples/log-archive-api-pod-spec.yaml 的只读 Secret 环境变量。未注入凭据前 log_archive 仍默认关闭，不宣称已部署或联调成功。
+KFP 仍保留自己的执行数据库，不合并 Loom/KFP schema。安装适配排除官方 SeaweedFS，统一使用 MinIO；部署顺序为 Secret → MinIO/PVC → 桶和账号初始化 → KFP/Argo。Argo archiveLogs 默认开启并按执行 UUID 归档，Loom 的 argo 模式直接读取，不再要求额外 manifest。Loom API 的日志与产物只读账号填写在所选 overlay 的 `config/config.local.yaml`，与其余平台配置一起生成 ConfigMap；未填写并启用前相关读取功能保持关闭。
 
 ## Notebook 浏览器入口
 
@@ -248,7 +254,7 @@ KFP 仍保留自己的执行数据库，不合并 Loom/KFP schema。安装适配
 
 该清单还限制 app=loom-api 的 mTLS 与网络入口，**不是完整官网网关**：普通业务 API、前端静态资源、内部执行器监听需在应用部署阶段补齐成套策略，不可为了放行普通 API 全局公开 /verify。KServe 推理鉴权也不复用 Notebook Cookie。
 
-不部署 Loom API/web 镜像、不执行数据库迁移，不装 Dex、Dashboard、Notebook Web App、Hub UI 或 Knative。失败后保留已创建资源，修正原因后重跑；没有自动回滚、卸载、prune 或 PVC 删除。
+`INSTALL_PLATFORM=false` 时不部署 Loom API/web 镜像，也不执行 Loom 业务库迁移；开启后由 `kubernetes/loom` 清单和显式迁移 Job 完成。脚本仍不安装 Dex、Dashboard、Notebook Web App、Hub UI 或 Knative。失败后保留已创建资源，修正原因后重跑；没有自动回滚、卸载、prune 或 PVC 删除。
 
 ## Trainer 后续支持预留
 

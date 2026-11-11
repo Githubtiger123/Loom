@@ -14,27 +14,31 @@
 |---|---|
 | `platform/` | 后端（Go + GORM + MySQL） |
 | `web/` | 前端（React + TypeScript + Atomus） |
-| `install/` | 锁定版本的集群依赖安装脚本、配置与部署清单 |
+| `install/docker/` | Docker 镜像、本地 Compose 与源码映射开发 |
+| `install/kubernetes/` | Loom 控制面 Kustomize 部署 |
+| `install/manifests/` | 锁定版本的 Kubeflow 集群依赖 |
 | `images/` | 镜像相关 |
 
 ## 本地启动
 
-首次连接真实集群时，先按 [集群依赖安装说明](install/README.md) 准备 Profile/Notebook 控制器等资源。资源适配在 `install/manifests/`，直接运行 `bash install/install.sh <kubectl-context>`；脚本按顺序 apply/wait，Pipeline、KServe、Trainer 可按需开启，不依赖 Python。Trainer 安装包括 JobSet 与官方训练运行时，不代表其 Loom 业务执行器已完成。该脚本不部署 Loom API/web，也不执行业务数据库初始化，本次未执行安装或验证集成。
+首次连接真实集群时，先按 [集群依赖安装说明](install/README.md) 准备 Profile/Notebook 控制器等资源。资源适配在 `install/manifests/`，直接运行 `bash install/install.sh <kubectl-context>`；脚本按顺序 apply/wait，Pipeline、KServe、Trainer 可按需开启，不依赖 Python。开启 `INSTALL_PLATFORM` 后同一入口也会部署 Loom 控制面并显式执行数据库迁移。Trainer 安装包括 JobSet 与官方训练运行时，不代表其 Loom 业务执行器已完成。
 
-开启 Pipeline 安装时，统一部署 [MinIO](install/minio.md)，不再部署上游 SeaweedFS；KFP/Argo 使用同一对象存储，Loom 离线日志可按执行 UUID 直接读取 Argo 归档，无需日志表或额外 manifest。API 的专用只读凭据仍需按部署示例注入，未进行真实集群验证。
+开启 Pipeline 安装时，统一部署 [MinIO](install/minio.md)，不再部署上游 SeaweedFS；KFP/Argo 使用同一对象存储，Loom 离线日志可按执行 UUID 直接读取 Argo 归档，无需日志表或额外 manifest。API 的专用只读凭据与其余环境配置一起填写在 Kubernetes overlay 的 `config.local.yaml`，未进行真实集群验证。
+
+本地开发统一通过 Docker Compose 映射源码，不要求在宿主机分别安装 Go/Node 依赖：
 
 ```bash
-# 后端
-cd platform
-go run ./cmd/platform -cmd=api
-
-# 前端
-cd web
-npm ci --ignore-scripts
-npm run dev
+cd install/docker
+cp .env.example .env
+kubectl config view --raw --flatten > kubeconfig
+docker compose --profile cluster up --build
 ```
 
-以上是后续运行命令，本次未执行。前端本地密码登录需要 HTTPS 代理和匹配的后端 `auth.public_origin`，直接访问 HTTP 开发端口不能完成该认证流程，详见前端说明。
+Go API/worker 使用 Air 监听源码并自动重编译，前端使用 Vite 热更新；迁移由独立一次性容器完成。详细的认证初始化、可选 Pipeline/KServe profile 和生产镜像命令见 [Docker 开发说明](install/docker/README.md)。本次未实际构建或运行。
+
+## 镜像与集群部署
+
+容器开发和镜像构建统一放在 [install/docker](install/docker/README.md)：Compose 映射 `platform/`、`web/` 源码并运行前端、API 和各后台角色，生产镜像也从这里构建。集群控制面使用 [install/kubernetes/loom](install/kubernetes/loom/README.md) 下的 Kustomize 清单，统一安装到 `loom-system`，包含 API、web、worker、sync、cron，以及按 overlay 开启的 Pipeline/KServe worker。
 
 ## 运行角色
 

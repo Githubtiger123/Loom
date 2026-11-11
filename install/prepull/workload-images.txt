@@ -1,0 +1,54 @@
+# Optional Istio grpc-simple injection template
+docker.io/library/busybox:1.28
+
+# Kubeflow Notebook Server v1.11.1
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-scipy:v1.11.1
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-pytorch-full:v1.11.1
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-pytorch-cuda-full:v1.11.1
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-tensorflow-full:v1.11.1
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-tensorflow-cuda-full:v1.11.1
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/codeserver-python:v1.11.1
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/rstudio-tidyverse:v1.11.1
+
+# KFP task infrastructure; pulled when a pipeline run or cache task starts
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/argoexec:v4.1.6
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/kfp-driver:2.18.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/kfp-launcher:2.18.0
+docker.io/library/alpine:3.23.7
+
+# KServe storage and optional kernel-cache helpers
+docker.io/kserve/storage-initializer:v0.21.0
+docker.io/kserve/kserve-kernelcachenode-agent:v0.21.0
+docker.io/kserve/kserve-mcv:v0.21.0-minimal
+registry.access.redhat.com/ubi9/ubi-minimal:9.8
+
+# KServe v0.21.0 ClusterServingRuntime images
+docker.io/kserve/autogluonserver:v0.21.0
+docker.io/kserve/huggingfaceserver:v0.21.0
+docker.io/kserve/huggingfaceserver:v0.21.0-gpu
+docker.io/kserve/lgbserver:v0.21.0
+docker.io/kserve/paddleserver:v0.21.0
+docker.io/kserve/pmmlserver:v0.21.0
+docker.io/kserve/predictiveserver:v0.21.0
+docker.io/kserve/sklearnserver:v0.21.0
+docker.io/kserve/xgbserver:v0.21.0
+docker.io/seldonio/mlserver:1.7.1
+docker.io/tensorflow/serving:2.6.2
+docker.io/pytorch/torchserve-kfs:0.9.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/tritonserver:23.05-py3
+docker.io/lmsysorg/sglang:v0.5.14
+docker.io/vllm/vllm-openai:v0.21.0
+docker.io/vllm/vllm-openai-cpu:v0.23.0@sha256:89e1fbe829038b1a560601990c8ec89625c622a969fcbc8f10ce48b6139795be
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/llm-d-cuda:v0.9.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/llm-d-router-disagg-sidecar:v0.10.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/llm-d-router-endpoint-picker:v0.10.0
+
+# Kubeflow Trainer v2.3.0 ClusterTrainingRuntime images
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/torchtune-trainer:v2.3.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/dataset-initializer:v2.3.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/model-initializer:v2.3.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/mlx-runtime:v2.3.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/deepspeed-runtime:v2.3.0
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/xgboost-runtime:v2.3.0
+docker.io/pytorch/pytorch:2.13.0-cuda13.0-cudnn9-runtime
+crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jax:25.10-py3

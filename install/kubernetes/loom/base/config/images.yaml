@@ -1,0 +1,44 @@
+# Notebook 私库镜像目录也由 ConfigMap 挂载，修改后 ConfigMap 哈希会变化。
+images:
+  - id: jupyter-scipy
+    category: jupyter
+    name: JupyterLab · SciPy
+    serverType: jupyter
+    image: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-scipy:v1.11.1
+    enabled: true
+  - id: jupyter-pytorch
+    category: jupyter
+    name: JupyterLab · PyTorch
+    serverType: jupyter
+    image: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-pytorch-full:v1.11.1
+    enabled: true
+  - id: jupyter-pytorch-cuda
+    category: jupyter
+    name: JupyterLab · PyTorch CUDA
+    serverType: jupyter
+    image: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-pytorch-cuda-full:v1.11.1
+    enabled: true
+  - id: jupyter-tensorflow
+    category: jupyter
+    name: JupyterLab · TensorFlow
+    serverType: jupyter
+    image: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-tensorflow-full:v1.11.1
+    enabled: true
+  - id: jupyter-tensorflow-cuda
+    category: jupyter
+    name: JupyterLab · TensorFlow CUDA
+    serverType: jupyter
+    image: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/jupyter-tensorflow-cuda-full:v1.11.1
+    enabled: true
+  - id: vscode-python
+    category: vscode
+    name: VS Code · Python
+    serverType: group-one
+    image: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/codeserver-python:v1.11.1
+    enabled: true
+  - id: rstudio-tidyverse
+    category: rstudio
+    name: RStudio · Tidyverse
+    serverType: group-two
+    image: crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/rstudio-tidyverse:v1.11.1
+    enabled: true

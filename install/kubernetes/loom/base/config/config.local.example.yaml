@@ -1,0 +1,2 @@
+# 空覆盖用于 base ConfigMap；具体 overlay 会用本地私有的 config.local.yaml 替换此键。
+{}
