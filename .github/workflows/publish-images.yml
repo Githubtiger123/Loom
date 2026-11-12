@@ -1,0 +1,151 @@
+name: Build and publish images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-images.yml
+      - .dockerignore
+      - platform/**
+      - web/**
+      - install/docker/**
+  workflow_dispatch:
+    inputs:
+      image_set:
+        description: Images to build and push
+        type: choice
+        required: true
+        default: all
+        options:
+          - all
+          - development
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validate configuration and generate image tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.metadata.outputs.tag }}
+      matrix: ${{ steps.metadata.outputs.matrix }}
+    steps:
+      - name: Validate registry secrets
+        shell: bash
+        env:
+          REGISTRY_HOST: ${{ secrets.REGISTRY_HOST }}
+          REGISTRY_NAMESPACE: ${{ secrets.REGISTRY_NAMESPACE }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          WEB_AUTH_MODE: ${{ vars.VITE_AUTH_MODE || 'trusted-header' }}
+        run: |
+          set -euo pipefail
+          for key in REGISTRY_HOST REGISTRY_NAMESPACE REGISTRY_USERNAME REGISTRY_PASSWORD; do
+            if [[ -z "${!key}" ]]; then
+              echo "::error::Missing repository secret: $key"
+              exit 1
+            fi
+          done
+          if [[ ! "$REGISTRY_HOST" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]+)?$ ]]; then
+            echo '::error::REGISTRY_HOST must be a registry hostname with an optional port, without a scheme or path.'
+            exit 1
+          fi
+          if [[ ! "$REGISTRY_NAMESPACE" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+            echo '::error::REGISTRY_NAMESPACE must be a single lowercase namespace, without slashes.'
+            exit 1
+          fi
+          case "$WEB_AUTH_MODE" in
+            local|trusted-header) ;;
+            *) echo '::error::VITE_AUTH_MODE must be local or trusted-header.'; exit 1 ;;
+          esac
+
+      - name: Generate shared timestamp and build matrix
+        id: metadata
+        shell: bash
+        env:
+          IMAGE_SET: ${{ inputs.image_set || 'all' }}
+        run: |
+          set -euo pipefail
+          tag="$(TZ=Asia/Shanghai date +'%y%m%d%H%M%S')"
+          matrix="$(jq -cn --arg selection "$IMAGE_SET" '{include: ([
+            {component: "platform", variant: "development", image: "loom-platform-dev", dockerfile: "install/docker/Dockerfile", target: "development"},
+            {component: "web", variant: "development", image: "loom-web-dev", dockerfile: "install/docker/dockerFrontend/Dockerfile", target: "development"},
+            {component: "platform", variant: "production", image: "loom-platform", dockerfile: "install/docker/Dockerfile", target: "runtime"},
+            {component: "web", variant: "production", image: "loom-web", dockerfile: "install/docker/dockerFrontend/Dockerfile", target: "runtime"}
+          ] | map(select($selection == "all" or .variant == $selection)))}')"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          {
+            echo '## Image build'
+            printf -- '- Tag: `%s` (Asia/Shanghai, YYMMDDhhmmss)\n' "$tag"
+            printf -- '- Selection: `%s`\n' "$IMAGE_SET"
+            echo '- Build and push only; no tests or deployment.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish ${{ matrix.image }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to image registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_HOST }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ secrets.REGISTRY_HOST }}/${{ secrets.REGISTRY_NAMESPACE }}/${{ matrix.image }}:${{ needs.prepare.outputs.tag }}
+          build-args: |
+            VITE_AUTH_MODE=${{ vars.VITE_AUTH_MODE || 'trusted-header' }}
+            VITE_NOTEBOOK_ORIGIN=${{ vars.VITE_NOTEBOOK_ORIGIN }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          # Keep single-platform manifests compatible with personal registries.
+          provenance: false
+          sbom: false
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.tag }}
+
+      - name: Record published image
+        shell: bash
+        env:
+          IMAGE_NAME: ${{ matrix.image }}
+          IMAGE_TAG: ${{ needs.prepare.outputs.tag }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          {
+            printf '## Published `%s:%s`\n\n' "$IMAGE_NAME" "$IMAGE_TAG"
+            printf -- '- Digest: `%s`\n' "$IMAGE_DIGEST"
+            echo '- Registry host and namespace come from repository secrets.'
+          } >> "$GITHUB_STEP_SUMMARY"
