@@ -25,16 +25,19 @@
 
 开启 Pipeline 安装时，统一部署 [MinIO](install/minio.md)，不再部署上游 SeaweedFS；KFP/Argo 使用同一对象存储，Loom 离线日志可按执行 UUID 直接读取 Argo 归档，无需日志表或额外 manifest。API 的专用只读凭据与其余环境配置一起填写在 Kubernetes overlay 的 `config.local.yaml`，未进行真实集群验证。
 
-本地开发统一通过 Docker Compose 映射源码，不要求在宿主机分别安装 Go/Node 依赖：
+本地开发采用与 Cube 类似的方式：先手动构建开发镜像，再通过 Docker Compose 指定镜像、映射源码，不要求在宿主机分别安装 Go/Node 依赖。在 `loom/` 根目录执行：
 
 ```bash
+docker build --target development -f install/docker/Dockerfile -t loom-platform-dev:local .
+docker build --target development -f install/docker/dockerFrontend/Dockerfile -t loom-web-dev:local .
+
 cd install/docker
 cp .env.example .env
 kubectl config view --raw --flatten > kubeconfig
-docker compose --profile cluster up --build
+docker compose --profile cluster up -d
 ```
 
-Go API/worker 使用 Air 监听源码并自动重编译，前端使用 Vite 热更新；迁移由独立一次性容器完成。详细的认证初始化、可选 Pipeline/KServe profile 和生产镜像命令见 [Docker 开发说明](install/docker/README.md)。本次未实际构建或运行。
+后续启动直接执行 `docker compose --profile cluster up -d`，无需重建镜像；镜像名可通过 `.env` 的 `LOOM_PLATFORM_DEV_IMAGE`、`LOOM_WEB_DEV_IMAGE` 指定。Go API/worker 使用 Air 监听源码并自动重编译，前端使用 Vite 热更新；迁移由独立一次性容器完成。详细的认证初始化、可选 Pipeline/KServe profile 和生产镜像命令见 [Docker 开发说明](install/docker/README.md)。本次未实际构建或运行。
 
 ## 镜像与集群部署
 

@@ -31,6 +31,9 @@ install/docker/data/
 install/kubernetes/loom/overlays/*/config/config.local.yaml
 install/kubernetes/loom/components/middleware/config/middleware.env
 
+# 压缩包不入库（曾误提交 install.zip）
+*.zip
+
 # IDE
 .idea/
 .vscode/

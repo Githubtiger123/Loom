@@ -1,10 +1,5 @@
 name: loom
 
-x-platform-build: &platform-build
-  context: ../..
-  dockerfile: install/docker/Dockerfile
-  target: development
-
 x-platform-environment: &platform-environment
   LOOM_DB_DSN: "loom:loom@tcp(mysql:3306)/loom?parseTime=true&charset=utf8mb4&loc=UTC"
   LOOM_REDIS_ENABLED: "true"
@@ -22,7 +17,7 @@ x-platform-environment: &platform-environment
   LOOM_LOG_LEVEL: debug
 
 x-platform-service: &platform-service
-  build: *platform-build
+  image: ${LOOM_PLATFORM_DEV_IMAGE:-loom-platform-dev:local}
   working_dir: /workspace/platform
   environment: *platform-environment
   volumes:
@@ -117,10 +112,7 @@ services:
       retries: 20
 
   web:
-    build:
-      context: ../..
-      dockerfile: install/docker/dockerFrontend/Dockerfile
-      target: development
+    image: ${LOOM_WEB_DEV_IMAGE:-loom-web-dev:local}
     working_dir: /workspace/web
     command: [npm, run, dev, --, --host, 0.0.0.0]
     environment:
