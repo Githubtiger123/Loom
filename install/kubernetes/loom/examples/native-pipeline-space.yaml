@@ -1,0 +1,30 @@
+# Apply separately in each verified business namespace (kubectl -n <space>).
+# Not part of base kustomization: never grants privileges to every namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-pipeline-task
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: loom-pipeline-task
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflowtaskresults]
+    verbs: [create, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: loom-pipeline-task
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: loom-pipeline-task
+subjects:
+  - kind: ServiceAccount
+    name: loom-pipeline-task
+# Provision Secret loom-native-artifacts separately with accessKey/secretKey.
+# Use a dedicated per-space writer, scoped to that group's loom-native prefix.
+# Do not put real storage credentials into this example or grant root access.

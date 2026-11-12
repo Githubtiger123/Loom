@@ -11,9 +11,66 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/service"
 )
 
-// RunPipeline 使用与外部桥相同的持久领取/授权/fence，实际调用官方 KFP v2 API。
+// RunPipeline keeps KFP execution and the opt-in native observer in the same
+// existing role. The observer never enables native submission implicitly.
 func (r *Runner) RunPipeline(ctx context.Context) error {
-	if r.Service == nil || r.Service.PipelineClient == nil || r.Service.PipelineVerifier == nil {
+	if r.Service == nil {
+		return fmt.Errorf("pipeline-worker 需要装配业务服务")
+	}
+	native := r.Service.PipelineConfig.NativeObserverEnabled
+	kfp := r.Service.PipelineClient != nil
+	executor := kfp || r.Service.PipelineConfig.NativeEnabled
+	if !native && !executor {
+		return fmt.Errorf("pipeline-worker 需要启用 KFP 或原生 Workflow 观测")
+	}
+	if native {
+		if r.Kube == nil || r.Service.NativePipelineClient == nil || r.Service.PipelineVerifier == nil {
+			return fmt.Errorf("原生 Workflow 观测需要 Kubernetes 客户端和空间核验器")
+		}
+		concurrency, qps := r.Service.PipelineConfig.SyncConcurrency, r.Service.PipelineConfig.SyncQPS
+		if concurrency < 1 || concurrency > 16 || qps < 1 || qps > 100 {
+			return fmt.Errorf("原生 Workflow 观测并发或限速配置无效")
+		}
+		maxOpen, err := inframysql.MaxOpenConnections(r.DB)
+		if err != nil {
+			return err
+		}
+		// Each observer holds the existing advisory lock on one connection and
+		// can open one short SQL transaction. No new lease system is added.
+		need := 2*concurrency + 2
+		if executor {
+			need += r.Concurrency + concurrency
+		}
+		if maxOpen != 0 && maxOpen < need {
+			return fmt.Errorf("启用原生观测时数据库 max_open 至少为 %d", need)
+		}
+	}
+	workCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	errs := make(chan error, 2)
+	count := 0
+	if executor {
+		count++
+		go func() { errs <- r.runKFPPipeline(workCtx) }()
+	}
+	if native {
+		count++
+		go func() { errs <- r.runNativePipelineObserver(workCtx) }()
+	}
+	var result error
+	for range count {
+		err := <-errs
+		if err != nil && result == nil {
+			result = err
+		}
+		cancel()
+	}
+	return result
+}
+
+// runKFPPipeline preserves the existing durable operation and polling path.
+func (r *Runner) runKFPPipeline(ctx context.Context) error {
+	if r.Service == nil || (r.Service.PipelineClient == nil && !r.Service.PipelineConfig.NativeEnabled) || r.Service.PipelineVerifier == nil {
 		return fmt.Errorf("pipeline-worker 需要启用 pipeline 并装配官方 KFP 客户端和空间核验器")
 	}
 	if r.Concurrency < 1 || r.Concurrency > 16 {
@@ -36,6 +93,9 @@ func (r *Runner) RunPipeline(ctx context.Context) error {
 	syncTicks := time.NewTicker(time.Second / time.Duration(syncQPS))
 	defer syncTicks.Stop()
 	for range syncConcurrency {
+		if r.Service.PipelineClient == nil {
+			break
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

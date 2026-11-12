@@ -94,6 +94,21 @@ images:
 pipeline:
   # 复用官方 KFP v2 后端，执行角色使用 -cmd pipeline-worker；不改 Notebook worker。
   enabled: false
+  # 仅启用受管原生 Workflow 的 Informer 观测，不启用原生提交或 IR 编译。
+  native_observer_enabled: false
+  # Native v3：显式 engine=NATIVE_ARGO；需迁移 22–24、Argo 和日志归档配置。
+  native_enabled: false
+  native_service_account: loom-pipeline-task
+  native_parallelism: 4
+  native_cpu: "1"
+  native_memory: 1Gi
+  native_artifact_endpoint: minio-service.kubeflow.svc.cluster.local:9000
+  native_artifact_bucket: mlpipeline
+  native_artifact_region: us-east-1
+  native_artifact_secret: loom-native-artifacts
+  # 每个业务空间中供 Argo 写日志的 Secret，不是后端只读日志凭据。
+  native_log_archive_secret: loom-native-logs
+  native_artifact_insecure: true
   endpoint: "http://ml-pipeline.kubeflow.svc.cluster.local:8888"
   # 官方 MLMD 的 grpc-web 入口；部署命名不同请修改。留空时 DAG 仍可读静态结构和 KFP 状态，元数据明确标记未配置。
   metadata_endpoint: "http://metadata-envoy-service.kubeflow.svc.cluster.local:9090"

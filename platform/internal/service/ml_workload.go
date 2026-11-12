@@ -163,6 +163,9 @@ func queueML(ctx context.Context, st *repository.Store, o *model.Operation, n *m
 		Name: n.identity.Name, ExternalID: n.state.ExternalID, Revision: n.state.Revision, DesiredState: n.state.DesiredState}
 	switch o.TargetType {
 	case "pipeline_run":
+		if n.row.(*model.PipelineRun).Engine != model.PipelineEngineKFP && n.row.(*model.PipelineRun).Engine != model.PipelineEngineNativeArgo {
+			return apperr.New(apperr.CodeUnavailable, "不支持的 Pipeline 执行引擎")
+		}
 		c.PipelineRun = &dto.PipelineRunSpec{}
 		if err := json.Unmarshal(n.state.RequestedSpec, c.PipelineRun); err != nil {
 			return err
@@ -297,11 +300,19 @@ func (s *Service) SubmitPipelineRun(ctx context.Context, actor, groupID, pipelin
 			if err != nil {
 				return err
 			}
+			engine := model.PipelineEngineKFP
+			if in.Engine == model.PipelineEngineNativeArgo {
+				if err := s.validateNativeRun(version, values); err != nil {
+					return err
+				}
+				engine = in.Engine
+			}
 			b, err := json.Marshal(dto.PipelineRunSpec{PipelineID: pipelineID, VersionID: v.ID, VersionRevision: v.Revision, PipelineVersionSpec: version, Values: values})
 			if err != nil {
 				return err
 			}
-			n := &model.PipelineRun{MLIdentity: model.MLIdentity{GroupID: groupID, Name: in.Name, CreatedBy: &actor}, MLExecutionState: mlNewState(g, o.ID, "RUNNING", b), PipelineID: pipelineID, VersionID: v.ID}
+			n := &model.PipelineRun{MLIdentity: model.MLIdentity{GroupID: groupID, Name: in.Name, CreatedBy: &actor}, MLExecutionState: mlNewState(g, o.ID, "RUNNING", b),
+				PipelineID: pipelineID, VersionID: v.ID, VersionRevision: &v.Revision, Engine: engine}
 			if err := st.DB.WithContext(ctx).Create(n).Error; err != nil {
 				return err
 			}
@@ -496,6 +507,9 @@ func (s *Service) changeMLState(ctx context.Context, actor, groupID, id uint64, 
 				return apperr.New(apperr.CodeConflict, "作业已经结束，不可再停止；历史保持终态")
 			}
 			if target == "pipeline_run" {
+				if err := nativeLifecycleAllowed(ctx, st, n.row.(*model.PipelineRun), action); err != nil {
+					return err
+				}
 				// 显式停止/删除替代编辑时取消未应用的新配置。
 				if err := st.DB.WithContext(ctx).Model(n.row).Where("id = ?", id).Update("pending_spec", nil).Error; err != nil {
 					return err

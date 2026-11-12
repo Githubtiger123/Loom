@@ -22,15 +22,7 @@ type PipelineSpaceVerifier interface {
 	VerifyPipelineSpace(context.Context, *MLExecutionClaim) error
 }
 
-type pipelineSubmission struct {
-	InstanceID  string `gorm:"primaryKey"`
-	RequestHash string
-	RunName     string
-	Attempted   bool
-	ExternalID  *string
-}
-
-func (pipelineSubmission) TableName() string { return "tb_pipeline_submission" }
+type pipelineSubmission = model.PipelineSubmission
 
 func (s *Service) PipelinePeer() string {
 	return mlHash([]byte("loom-internal-kfp-v1\x00" + s.Cluster + "\x00" + s.PipelineConfig.Endpoint))
@@ -53,10 +45,30 @@ func pipelineProblem(reason string, permanent bool) error {
 
 // ExecutePipelineClaim 是内置 KFP 适配器的一次有界处理；外部 I/O 不进入业务事务。
 func (s *Service) ExecutePipelineClaim(ctx context.Context, claim *MLExecutionClaim) error {
+	if claim == nil || claim.MLExecutionView == nil {
+		return mlExecutionInvalid()
+	}
+	// Persisted identity selects the engine. Caller Command is not an engine switch.
+	op, err := s.Store.Operation(ctx, claim.OperationID)
+	if err != nil {
+		return err
+	}
+	command, err := mlExecutionCommand(op)
+	if err != nil {
+		return err
+	}
+	current, err := s.Store.PipelineRun(ctx, command.GroupID, command.ResourceID, false)
+	if err != nil {
+		return err
+	}
+	claim.Command = *command
+	if current.Engine == model.PipelineEngineNativeArgo {
+		return s.executeNativePipelineClaim(ctx, claim)
+	}
 	if s.PipelineClient == nil || s.PipelineVerifier == nil {
 		return fmt.Errorf("KFP 执行依赖未配置")
 	}
-	err := s.executePipelineClaim(ctx, claim)
+	err = s.executePipelineClaim(ctx, claim)
 	if err == nil || ctx.Err() != nil {
 		return err
 	}
@@ -112,6 +124,9 @@ func (s *Service) executePipelineClaim(ctx context.Context, claim *MLExecutionCl
 	if err != nil {
 		return err
 	}
+	if current.Engine != model.PipelineEngineKFP {
+		return pipelineProblem("ENGINE_NOT_SUPPORTED", true)
+	}
 	if current.ExecutionCleaned && current.InstanceID == c.InstanceID && c.Action != MLPipelineSubmit {
 		id := ""
 		if claim.ExternalID != nil {
@@ -146,12 +161,15 @@ func (s *Service) executePipelineClaim(ctx context.Context, claim *MLExecutionCl
 			// 提交和清理使用同一个目标锁。没有提交日志就证明 Loom 从未发起 KFP CreateRun。
 			return s.reportPipelineRun(ctx, claim, nil, pipelineAbsentState(c.Action), true, "")
 		}
-		journal = &pipelineSubmission{InstanceID: c.InstanceID, RequestHash: hash, RunName: name}
+		journal = &pipelineSubmission{InstanceID: c.InstanceID, RequestHash: hash, RunName: name, Engine: model.PipelineEngineKFP}
 		if err := s.DB.WithContext(ctx).Create(journal).Error; err != nil {
 			return err
 		}
 	} else if err != nil {
 		return err
+	}
+	if journal.Engine != model.PipelineEngineKFP {
+		return pipelineProblem("IDENTITY_CONFLICT", true)
 	}
 	if journal.RequestHash != hash || journal.RunName != name {
 		return pipelineProblem("POLICY_DENIED", true)
@@ -414,6 +432,13 @@ type PipelineRuntimeTask struct {
 }
 
 func (s *Service) PipelineRunRuntime(ctx context.Context, actor, groupID, id uint64) (*PipelineRuntime, error) {
+	current, readErr := s.PipelineRun(ctx, actor, groupID, id)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if current.Engine == model.PipelineEngineNativeArgo {
+		return s.nativePipelineRuntime(ctx, actor, current)
+	}
 	n, run, details, err := s.readPipelineObservation(ctx, actor, groupID, id)
 	if err != nil {
 		return nil, err

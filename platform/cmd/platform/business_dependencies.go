@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/githubtiger123/loom/platform/internal/apperr"
@@ -24,6 +26,7 @@ func newBusinessService(base *service.Service, client *k8s.Client) *service.Serv
 		base.SetNotebookReader(client)
 		base.PipelineLogs = client
 		base.PipelineTerminal = client
+		base.NativePipelineClient = client
 		base.KServeClient = client
 	}
 	return base
@@ -45,6 +48,9 @@ func configurePipeline(base *service.Service, cfg config.Pipeline) {
 
 func configureLogArchive(base *service.Service, cfg config.LogArchive) error {
 	if !cfg.Enabled {
+		if base.PipelineConfig.NativeEnabled {
+			return fmt.Errorf("native pipelines require log_archive.enabled=true and format=argo")
+		}
 		return nil
 	}
 	reader, err := logarchive.New(cfg)
@@ -52,6 +58,19 @@ func configureLogArchive(base *service.Service, cfg config.LogArchive) error {
 		return err
 	}
 	base.PipelineLogArchivesReader = reader
+	if cfg.Format == "argo" {
+		u, err := url.Parse(cfg.Endpoint)
+		if err != nil {
+			return err
+		}
+		secret := base.PipelineConfig.NativeLogArchiveSecret
+		if secret == "" {
+			secret = base.PipelineConfig.NativeArtifactSecret
+		}
+		base.NativeLogArchivePolicy = &k8s.NativeLogArchivePolicy{Endpoint: u.Host, Bucket: cfg.Bucket, Region: cfg.Region, Insecure: u.Scheme == "http", Secret: secret, Prefix: cfg.Prefix, Cluster: base.Cluster}
+	} else if base.PipelineConfig.NativeEnabled {
+		return fmt.Errorf("native pipeline automatic logs require log_archive.format=argo")
+	}
 	return nil
 }
 

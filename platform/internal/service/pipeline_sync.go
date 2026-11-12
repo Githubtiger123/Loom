@@ -45,7 +45,7 @@ func (s *Service) SyncNextPipelineRun(ctx context.Context) (bool, error) {
 	err := repository.InTx(ctx, s.DB, func(st *repository.Store) error {
 		err := st.DB.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 			Select("id", "group_id", "instance_id", "revision", "cluster", "sync_failures").
-			Where("cluster = ? AND sync_enabled = TRUE AND deleted_at IS NULL AND sync_next_at <= UTC_TIMESTAMP(3)", s.Cluster).
+			Where("cluster = ? AND engine = ? AND sync_enabled = TRUE AND deleted_at IS NULL AND sync_next_at <= UTC_TIMESTAMP(3)", s.Cluster, model.PipelineEngineKFP).
 			Where("sync_lease_until IS NULL OR sync_lease_until <= UTC_TIMESTAMP(3)").
 			Order("sync_next_at").Order("id").Take(c).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -87,7 +87,7 @@ func (s *Service) readPipelineSync(ctx context.Context, c *pipelineSyncClaim) (p
 	if err != nil {
 		return pipelineSyncSample{}, err
 	}
-	if n.InstanceID != c.InstanceID || n.Revision != c.Revision || n.Cluster != c.Cluster || n.DeletedAt != nil {
+	if n.Engine != model.PipelineEngineKFP || n.InstanceID != c.InstanceID || n.Revision != c.Revision || n.Cluster != c.Cluster || n.DeletedAt != nil {
 		return pipelineSyncSample{Busy: true}, nil
 	}
 	j := &pipelineSubmission{}
@@ -97,7 +97,7 @@ func (s *Service) readPipelineSync(ctx context.Context, c *pipelineSyncClaim) (p
 		}
 		return pipelineSyncSample{}, err
 	}
-	if !j.Attempted || (j.ExternalID != nil && *j.ExternalID != n.InstanceID) || j.RunName != "loom-"+n.InstanceID ||
+	if j.Engine != model.PipelineEngineKFP || !j.Attempted || (j.ExternalID != nil && *j.ExternalID != n.InstanceID) || j.RunName != "loom-"+n.InstanceID ||
 		(n.ExternalID != nil && *n.ExternalID != n.InstanceID) {
 		return pipelineSyncSample{Reason: "IDENTITY_CONFLICT"}, nil
 	}

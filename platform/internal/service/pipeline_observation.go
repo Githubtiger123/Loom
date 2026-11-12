@@ -15,6 +15,9 @@ func (s *Service) readPipelineObservation(ctx context.Context, actor, groupID, i
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if n.Engine != model.PipelineEngineKFP {
+		return nil, nil, nil, apperr.New(apperr.CodeUnavailable, "当前执行不是 KFP 运行，原生 Argo 详情适配器尚未接入")
+	}
 	if s.PipelineClient == nil {
 		return nil, nil, nil, apperr.New(apperr.CodeUnavailable, "官方 KFP 后端尚未配置")
 	}
@@ -29,7 +32,7 @@ func (s *Service) readPipelineObservation(ctx context.Context, actor, groupID, i
 	if err != nil {
 		return nil, nil, nil, apperr.New(apperr.CodeUnavailable, "无法读取 KFP 运行详情")
 	}
-	if !journal.Attempted || journal.ExternalID == nil || *journal.ExternalID != *n.ExternalID || run.ID != n.InstanceID || run.ID != *n.ExternalID || run.Namespace != n.Namespace || run.Name != journal.RunName || run.Description != "loom:v1:"+n.InstanceID+":"+journal.RequestHash {
+	if journal.Engine != model.PipelineEngineKFP || !journal.Attempted || journal.ExternalID == nil || *journal.ExternalID != *n.ExternalID || run.ID != n.InstanceID || run.ID != *n.ExternalID || run.Namespace != n.Namespace || run.Name != journal.RunName || run.Description != "loom:v1:"+n.InstanceID+":"+journal.RequestHash {
 		return nil, nil, nil, apperr.New(apperr.CodeConflict, "KFP 运行身份不匹配")
 	}
 	details := &kfp.RunDetails{Tasks: []kfp.TaskDetail{}}

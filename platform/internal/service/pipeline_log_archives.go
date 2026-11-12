@@ -48,6 +48,27 @@ func (s *Service) pipelineArchiveExecution(ctx context.Context, actor, groupID, 
 		return empty, err
 	}
 	if len(attempts) != 0 {
+		if attempts[0].Engine == model.PipelineEngineNativeArgo {
+			a := &attempts[0]
+			j := &model.PipelineSubmission{}
+			if err := s.DB.WithContext(ctx).Where("instance_id = ?", a.InstanceID).First(j).Error; err != nil {
+				return empty, err
+			}
+			frozen, err := restoreNativeStaticNodes(a, j)
+			if err != nil {
+				return empty, err
+			}
+			c := frozen.Input.Command
+			if c.ResourceID != id || c.GroupID != groupID || c.InstanceID != instance || c.Cluster != s.Cluster {
+				return empty, nativeFinalConflict()
+			}
+			var snapshot nativeStagingSnapshot
+			if json.Unmarshal(a.Snapshot, &snapshot) != nil { return empty, nativeFinalConflict() }
+			if snapshot.Policy.LogArchive != nil && !sameNativeLogStorage(snapshot.Policy.LogArchive, s.NativeLogArchivePolicy) {
+				return empty, apperr.New(apperr.CodeConflict, "日志读取配置与历史执行归档位置不一致")
+			}
+			return logarchive.Execution{Cluster: c.Cluster, Namespace: c.Namespace, InstanceID: instance}, nil
+		}
 		var old model.PipelineRun
 		if json.Unmarshal(attempts[0].Snapshot, &old) != nil || old.ID != id || old.GroupID != groupID || old.InstanceID != instance {
 			return empty, apperr.New(apperr.CodeConflict, "历史执行快照身份不一致")

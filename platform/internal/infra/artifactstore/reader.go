@@ -3,6 +3,7 @@ package artifactstore
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"path"
@@ -30,6 +31,7 @@ type Reader struct {
 	client         *minio.Client
 	bucket, prefix string
 	timeout        time.Duration
+	endpoint       string
 	slots          chan struct{}
 }
 
@@ -48,7 +50,7 @@ func New(c config.ArtifactStore) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Reader{client: client, bucket: c.Bucket, prefix: c.Prefix, timeout: c.Timeout.Std(), slots: make(chan struct{}, 4)}, nil
+	return &Reader{client: client, endpoint: u.Host, bucket: c.Bucket, prefix: c.Prefix, timeout: c.Timeout.Std(), slots: make(chan struct{}, 4)}, nil
 }
 
 // Read accepts no user-supplied endpoint, key or provider credentials. Namespace
@@ -68,6 +70,21 @@ func (r *Reader) Read(ctx context.Context, namespace, uri, suffix string, limit 
 	if !validator.IsArtifactKey(key) || !strings.HasPrefix(key, r.prefix+"/"+namespace+"/") || !validator.IsArtifactKey(key+suffix) {
 		return nil, apperr.New(apperr.CodeForbidden, "产物不在当前组的存储目录内")
 	}
+	return r.readKey(ctx, key+suffix, limit)
+}
+
+// ReadNative has a separate exact run/namespace-UID prefix. It does not weaken
+// the historical namespace path validation of Read, or accept a remote URL.
+func (r *Reader) ReadNative(ctx context.Context, groupID uint64, namespaceUID, instance, endpoint, bucket, key string, limit int64) (*Object, error) {
+	prefix := fmt.Sprintf("loom-native/%d/%s/%s/", groupID, namespaceUID, instance)
+	if groupID == 0 || !validator.IsCatalogID(namespaceUID) || !validator.IsCanonicalUUID(instance) || endpoint != r.endpoint || bucket != r.bucket ||
+		!validator.IsArtifactKey(key) || !strings.HasPrefix(key, prefix) {
+		return nil, apperr.New(apperr.CodeForbidden, "原生产物不属于配置的存储或本次执行目录")
+	}
+	return r.readKey(ctx, key, limit)
+}
+
+func (r *Reader) readKey(ctx context.Context, key string, limit int64) (*Object, error) {
 	if limit < 1 || limit > MaxDownloadBytes {
 		return nil, apperr.New(apperr.CodeInvalid, "产物读取大小无效")
 	}
@@ -81,7 +98,6 @@ func (r *Reader) Read(ctx context.Context, namespace, uri, suffix string, limit 
 	}
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
-	key += suffix
 	stat, err := r.client.StatObject(ctx, r.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
 		return nil, storageError(err)

@@ -170,6 +170,9 @@ func (s *Service) readPipelineDAGArtifacts(ctx context.Context, actor, groupID, 
 	}
 	out := &pipelineDAGRead{run: n, spec: spec, graph: graph, executions: map[string]*mlmd.Execution{}, tasks: map[string]*kfp.TaskDetail{}}
 	out.dag = &PipelineDAG{InstanceID: n.InstanceID, Revision: n.Revision, ExternalID: n.ExternalID, PackageDigest: spec.PackageDigest, State: n.ObservedState, ReadAt: time.Now().UTC(), Runtime: PipelineDataSource{Status: "NOT_SUBMITTED"}, Metadata: PipelineDataSource{Status: "NOT_SUBMITTED"}, Definitions: graph.Definitions, Edges: graph.Edges, Instances: []PipelineNodeInstance{}}
+	if n.Engine == model.PipelineEngineNativeArgo {
+		return s.readNativePipelineDAG(ctx, out)
+	}
 	if n.ExecutionCleaned {
 		out.dag.Runtime.Status = "CLEANED"
 		out.dag.Metadata.Status = "CLEANED"
@@ -424,7 +427,11 @@ func buildNodeIO(r *pipelineDAGRead, d *PipelineNodeDefinition, n *PipelineNodeI
 		}
 		if values, ok := e.Custom[key].(map[string]any); ok {
 			for name, value := range values {
-				out.Parameters[name] = PipelineParameter{true, value, "MLMD"}
+				source := "MLMD"
+				if r.run.Engine == model.PipelineEngineNativeArgo {
+					source = "NATIVE_ARGO"
+				}
+				out.Parameters[name] = PipelineParameter{true, value, source}
 			}
 			out.ParametersStatus = "AVAILABLE"
 		}

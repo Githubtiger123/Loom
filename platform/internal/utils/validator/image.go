@@ -7,5 +7,9 @@ import "regexp"
 var notebookImageReference = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?(?::[0-9]+)?/)?[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*(?:/[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*)*(?::[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127})?(?:@sha256:[a-fA-F0-9]{64})?$`)
 
 func IsNotebookImageReference(value string) bool {
+	return IsContainerImageReference(value)
+}
+
+func IsContainerImageReference(value string) bool {
 	return len(value) > 0 && len(value) <= 512 && notebookImageReference.MatchString(value)
 }

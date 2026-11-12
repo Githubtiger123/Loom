@@ -15,17 +15,25 @@ import (
 )
 
 type PipelinePodRef struct {
-	Namespace   string
-	RunID       string
-	Pod         string // 来自已核实身份的 KFP task_details，不是任意用户输入。
-	Container   string
-	ExecutionID string // KFP 漏填 pod_name 时，按受管 launcher execution ID 精确匹配。
+	Namespace      string
+	RunID          string
+	Pod            string // 来自已核实身份的 KFP task_details，不是任意用户输入。
+	Container      string
+	ExecutionID    string // KFP 漏填 pod_name 时，按受管 launcher execution ID 精确匹配。
+	NativeWorkflow *PipelineWorkflowRef
+	NativeSpecHash string
+	NativePodUID   string
+	NativeNodeID   string
+	NativeNodeName string
 }
 
 // ResolvePipelinePod 校验 Pod -> Workflow UID -> KFP Run 的执行归属。
 // 不提供按 namespace 任意访问 Pod 的业务接口；日志与终端共享执行归属解析。
 // 非 Argo/非直接 Workflow owner 明确拒绝。
 func (c *Client) ResolvePipelinePod(ctx context.Context, ref PipelinePodRef) (podlog.Target, error) {
+	if ref.NativeWorkflow != nil {
+		return c.resolveNativePipelinePod(ctx, ref)
+	}
 	if !validator.IsDNS1123Label(ref.Namespace) || (ref.Pod != "" && !validator.IsSecretName(ref.Pod)) || !validator.IsCatalogID(ref.RunID) {
 		return podlog.Target{}, apperr.New(apperr.CodeConflict, "KFP 节点尚无合法 Pod 映射")
 	}

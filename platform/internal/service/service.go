@@ -29,6 +29,7 @@ type Service struct {
 	NotebookReader            NotebookReader
 	NotebookImages            *config.NotebookImageCatalog
 	PipelineClient            *kfp.Client
+	NativePipelineClient      *k8s.Client
 	PipelineMetadata          PipelineMetadataReader
 	PipelineArtifacts         PipelineArtifactReader
 	PipelineConfig            config.Pipeline
@@ -36,6 +37,7 @@ type Service struct {
 	PipelineLogs              PipelineLogReader
 	PipelineTerminal          PipelineTerminalClient
 	PipelineLogArchivesReader PipelineLogArchiveReader
+	NativeLogArchivePolicy    *k8s.NativeLogArchivePolicy
 	KServeClient              *k8s.Client
 	KServeConfig              config.KServe
 	KServeVerifier            KServeSpaceVerifier

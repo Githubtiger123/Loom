@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"time"
@@ -10,11 +13,16 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/infra/artifactstore"
 	"github.com/githubtiger123/loom/platform/internal/infra/mlmd"
 	"github.com/githubtiger123/loom/platform/internal/infra/pipelineviz"
+	"github.com/githubtiger123/loom/platform/internal/model"
 	"github.com/githubtiger123/loom/platform/internal/utils/validator"
 )
 
 type PipelineArtifactReader interface {
 	Read(context.Context, string, string, string, int64) (*artifactstore.Object, error)
+}
+
+type NativePipelineArtifactReader interface {
+	ReadNative(context.Context, uint64, string, string, string, string, string, int64) (*artifactstore.Object, error)
 }
 
 type PipelineVisualization struct {
@@ -188,7 +196,25 @@ func (s *Service) PipelineArtifactContent(ctx context.Context, actor, gid, rid u
 			limit = artifactstore.MaxKFPPreviewBytes
 		}
 	}
-	obj, err := s.PipelineArtifacts.Read(ctx, scope.data.run.Namespace, a.StorageURI, suffix, limit)
+	var obj *artifactstore.Object
+	if scope.data.run.Engine == model.PipelineEngineNativeArgo {
+		obj, err = s.readNativeArtifactContent(ctx, scope.data.run, artifactID, limit)
+		if obj != nil {
+			archiveName := obj.Name == "artifact.tar.gz"
+			obj.Name = a.Name
+			if obj.Name == "" {
+				obj.Name = "artifact"
+			}
+			if archiveName {
+				if !download {
+					return nil, apperr.New(apperr.CodeInvalid, "目录产物请下载 tar.gz 归档")
+				}
+				obj.Name += ".tar.gz"
+			}
+		}
+	} else {
+		obj, err = s.PipelineArtifacts.Read(ctx, scope.data.run.Namespace, a.StorageURI, suffix, limit)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -206,4 +232,73 @@ func (s *Service) PipelineArtifactContent(ctx context.Context, actor, gid, rid u
 		return nil, err
 	}
 	return out, nil
+}
+
+func (s *Service) readNativeArtifactContent(ctx context.Context, run *model.PipelineRun, artifactID string, limit int64) (*artifactstore.Object, error) {
+	reader, ok := s.PipelineArtifacts.(NativePipelineArtifactReader)
+	if !ok {
+		return nil, apperr.New(apperr.CodeUnavailable, "原生产物存储读取尚未配置")
+	}
+	row := &model.PipelineArtifact{}
+	if err := s.DB.WithContext(ctx).Where("id = ? AND group_id = ? AND state = ?", artifactID, run.GroupID, "PUBLISHED").First(row).Error; err != nil {
+		return nil, domainError(err)
+	}
+	a, err := s.Store.PipelineRunAttempt(ctx, run.GroupID, run.ID, run.InstanceID, false)
+	if err != nil {
+		return nil, err
+	}
+	if a.NamespaceUID == nil {
+		return nil, nativeFinalConflict()
+	}
+	producerInstance := run.InstanceID
+	if row.ProducerInstanceID == nil {
+		return nil, nativeFinalConflict()
+	}
+	if *row.ProducerInstanceID != run.InstanceID {
+		// Caller already resolved artifact membership through the authorized
+		// task outputs. Recheck the producer's immutable space UID as well.
+		producer := &model.PipelineRunAttempt{}
+		err := s.DB.WithContext(ctx).Where("group_id = ? AND instance_id = ?", run.GroupID, *row.ProducerInstanceID).First(producer).Error
+		if err != nil {
+			return nil, err
+		}
+		if producer.NamespaceUID == nil || *producer.NamespaceUID != *a.NamespaceUID {
+			return nil, nativeFinalConflict()
+		}
+		producerInstance = *row.ProducerInstanceID
+	}
+	var object struct {
+		Endpoint    string `json:"endpoint"`
+		Bucket      string `json:"bucket"`
+		Key         string `json:"key"`
+		SHA256      string `json:"sha256"`
+		Size        int64  `json:"size"`
+		Format      string `json:"format"`
+		Kind        string `json:"kind"`
+		DecodedSize int64  `json:"decodedSize"`
+		Entries     int    `json:"entries"`
+	}
+	if json.Unmarshal(row.ObjectRef, &object) != nil || !validator.IsSHA256(object.SHA256) {
+		return nil, nativeFinalConflict()
+	}
+	readLimit := limit
+	if object.Format != "" {
+		readLimit = artifactstore.MaxDownloadBytes
+	}
+	obj, err := reader.ReadNative(ctx, run.GroupID, *a.NamespaceUID, producerInstance, object.Endpoint, object.Bucket, object.Key, readLimit)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(obj.Data)) != object.Size || fmt.Sprintf("%x", sha256.Sum256(obj.Data)) != object.SHA256 {
+		return nil, apperr.New(apperr.CodeConflict, "产物内容与发布摘要不一致")
+	}
+	if object.Format != "" {
+		if object.Format != "TAR_GZIP_V1" {
+			return nil, nativeFinalConflict()
+		}
+		if err := artifactstore.DecodeNativeFile(obj, object.Kind, object.DecodedSize, object.Entries, limit); err != nil {
+			return nil, err
+		}
+	}
+	return obj, nil
 }

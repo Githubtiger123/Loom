@@ -1,0 +1,28 @@
+# Apply separately in each verified business namespace, not in loom-system.
+# Verify the actual Argo controller identity before applying. This supplements
+# the controller's normal Workflow/Pod RBAC; it never binds the component SA.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: loom-native-argo-cache
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, create, update, patch]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [loom-native-artifacts, loom-native-logs]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: loom-native-argo-cache
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: loom-native-argo-cache
+subjects:
+  - kind: ServiceAccount
+    name: argo
+    namespace: kubeflow

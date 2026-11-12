@@ -212,6 +212,35 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: loom-pipeline-observer
+rules:
+  # Watch is limited to the worker, not the API identity sharing read access.
+  # Native writes belong only to the pipeline worker, never the API identity.
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [watch, create, patch, delete]
+  # Per-Workflow memoization projections; component execution identities must
+  # not receive these permissions. Argo's controller needs its own cache RBAC.
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [get, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: loom-pipeline-observer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: loom-pipeline-observer
+subjects:
+  - kind: ServiceAccount
+    name: loom-pipeline
+    namespace: loom-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   name: loom-kserve-worker
 rules:
   - apiGroups: [serving.kserve.io]

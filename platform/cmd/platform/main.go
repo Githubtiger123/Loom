@@ -162,6 +162,12 @@ func main() {
 		runner.NotebookImageCatalog = notebookImages
 		runner.Service.NotebookImages = notebookImages
 		configurePipeline(runner.Service, cfg.Pipeline)
+		if *role == "pipeline-worker" {
+			if err := configureLogArchive(runner.Service, cfg.LogArchive); err != nil {
+				logger.Error("Pipeline 日志归档配置失败", "err", err)
+				os.Exit(1)
+			}
+		}
 		configureKServe(runner.Service, cfg.KServe)
 		var runErr error
 		switch *role {

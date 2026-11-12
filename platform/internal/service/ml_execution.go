@@ -267,7 +267,7 @@ func (s *Service) ClaimMLExecution(ctx context.Context, peer string, in dto.Clai
 	}
 	seen := map[string]bool{}
 	for _, action := range in.Actions {
-		if s.PipelineClient != nil && (action == string(MLPipelineSubmit) || action == string(MLPipelineStop) || action == string(MLPipelineDelete) || action == string(MLPipelineEdit)) && peer != s.PipelinePeer() {
+		if (s.PipelineClient != nil || s.PipelineConfig.NativeEnabled) && (action == string(MLPipelineSubmit) || action == string(MLPipelineStop) || action == string(MLPipelineDelete) || action == string(MLPipelineEdit)) && peer != s.PipelinePeer() {
 			return nil, apperr.New(apperr.CodeConflict, "Pipeline 已由内置 KFP worker 管理，不允许外部执行器同时领取")
 		}
 		if s.KServeConfig.Enabled && (action == string(MLKServeCreate) || action == string(MLKServeUpdate) || action == string(MLKServeDeploy) || action == string(MLKServeStop) || action == string(MLKServeDelete)) && peer != s.KServePeer() {
@@ -589,6 +589,12 @@ func (s *Service) ReportMLExecution(ctx context.Context, peer, id string, in dto
 			e.LastReportOwner != nil && *e.LastReportOwner == in.LeaseOwner && e.LastReportPeerSHA256 != nil && *e.LastReportPeerSHA256 == peer {
 			out = mlExecutionView(o, c, e)
 			return nil
+		}
+		if run, ok := n.row.(*model.PipelineRun); ok && run.Engine == model.PipelineEngineNativeArgo {
+			// Native start acceptance is not run success. The generic bridge
+			// cannot bypass node/output/final-snapshot gates or impersonate the
+			// future native finalizer. Exact committed replay above is read-only.
+			return apperr.New(apperr.CodeConflict, "原生 Argo 执行不接受通用执行回执，需通过内部生命周期收尾")
 		}
 		if err := mlLiveExecution(ctx, st, o, c, n, e, peer, in.MLExecutionLeaseReq); err != nil {
 			return err

@@ -195,6 +195,7 @@ func Default() *Config {
 		Auth:     Auth{Audience: "loom-api", AccessTTL: Duration(15 * time.Minute), SessionTTL: Duration(15 * 24 * time.Hour)},
 		Images:   Images{Path: "configs/images.yaml"},
 		Pipeline: Pipeline{ServiceAccount: "default-editor", Timeout: Duration(15 * time.Second), PollInterval: Duration(15 * time.Second),
+			NativeServiceAccount: "loom-pipeline-task", NativeParallelism: 4, NativeCPU: "1", NativeMemory: "1Gi", NativeArtifactRegion: "us-east-1", NativeArtifactSecret: "loom-native-artifacts",
 			SyncInterval: Duration(5 * time.Second), TerminalSyncInterval: Duration(5 * time.Minute), SyncConcurrency: 2, SyncQPS: 10},
 		KServe: KServe{ServiceAccount: "default-editor", DeploymentMode: "Standard", PollInterval: Duration(10 * time.Second),
 			ResyncInterval: Duration(5 * time.Minute), SyncConcurrency: 2, SyncQPS: 10},
@@ -299,6 +300,17 @@ func applyEnv(c *Config) {
 
 	envStr(&c.Images.Path, "LOOM_IMAGES_PATH")
 	envBool(&c.Pipeline.Enabled, "LOOM_PIPELINE_ENABLED")
+	envBool(&c.Pipeline.NativeObserverEnabled, "LOOM_PIPELINE_NATIVE_OBSERVER_ENABLED")
+	envBool(&c.Pipeline.NativeEnabled, "LOOM_PIPELINE_NATIVE_ENABLED")
+	envStr(&c.Pipeline.NativeServiceAccount, "LOOM_PIPELINE_NATIVE_SERVICE_ACCOUNT")
+	envStr(&c.Pipeline.NativeArtifactEndpoint, "LOOM_PIPELINE_NATIVE_ARTIFACT_ENDPOINT")
+	envStr(&c.Pipeline.NativeArtifactBucket, "LOOM_PIPELINE_NATIVE_ARTIFACT_BUCKET")
+	envStr(&c.Pipeline.NativeArtifactRegion, "LOOM_PIPELINE_NATIVE_ARTIFACT_REGION")
+	envStr(&c.Pipeline.NativeArtifactSecret, "LOOM_PIPELINE_NATIVE_ARTIFACT_SECRET")
+	envBool(&c.Pipeline.NativeArtifactInsecure, "LOOM_PIPELINE_NATIVE_ARTIFACT_INSECURE")
+	envStr(&c.Pipeline.NativeLogArchiveSecret, "LOOM_PIPELINE_NATIVE_LOG_ARCHIVE_SECRET")
+	envStr(&c.Pipeline.NativeCPU, "LOOM_PIPELINE_NATIVE_CPU")
+	envStr(&c.Pipeline.NativeMemory, "LOOM_PIPELINE_NATIVE_MEMORY")
 	envStr(&c.Pipeline.Endpoint, "LOOM_PIPELINE_ENDPOINT")
 	envStr(&c.Pipeline.MetadataEndpoint, "LOOM_PIPELINE_METADATA_ENDPOINT")
 	envStr(&c.Pipeline.MetadataTokenFile, "LOOM_PIPELINE_METADATA_TOKEN_FILE")

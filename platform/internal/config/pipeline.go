@@ -9,25 +9,50 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/utils/validator"
 )
 
-// Pipeline 只连接运维配置的官方 KFP 服务，不接受用户提供端点或执行身份。
+// Pipeline retains KFP for existing runs. NativeEnabled explicitly enables the
+// bounded Python IR path; observation alone never enables native submission.
 type Pipeline struct {
-	Enabled              bool     `yaml:"enabled"`
-	Endpoint             string   `yaml:"endpoint"`
-	TokenFile            string   `yaml:"token_file"`
-	ServiceAccount       string   `yaml:"service_account"`
-	PipelineRoot         string   `yaml:"pipeline_root"`
-	Timeout              Duration `yaml:"timeout"`
-	PollInterval         Duration `yaml:"poll_interval"`
-	SyncInterval         Duration `yaml:"sync_interval"`
-	TerminalSyncInterval Duration `yaml:"terminal_sync_interval"`
-	SyncConcurrency      int      `yaml:"sync_concurrency"`
-	SyncQPS              int      `yaml:"sync_qps"`
+	Enabled                bool     `yaml:"enabled"`
+	NativeObserverEnabled  bool     `yaml:"native_observer_enabled"`
+	NativeEnabled          bool     `yaml:"native_enabled"`
+	NativeServiceAccount   string   `yaml:"native_service_account"`
+	NativeArtifactEndpoint string   `yaml:"native_artifact_endpoint"`
+	NativeArtifactBucket   string   `yaml:"native_artifact_bucket"`
+	NativeArtifactRegion   string   `yaml:"native_artifact_region"`
+	NativeArtifactSecret   string   `yaml:"native_artifact_secret"`
+	NativeArtifactInsecure bool     `yaml:"native_artifact_insecure"`
+	NativeLogArchiveSecret string   `yaml:"native_log_archive_secret"`
+	NativeParallelism      int64    `yaml:"native_parallelism"`
+	NativeCPU              string   `yaml:"native_cpu"`
+	NativeMemory           string   `yaml:"native_memory"`
+	Endpoint               string   `yaml:"endpoint"`
+	TokenFile              string   `yaml:"token_file"`
+	ServiceAccount         string   `yaml:"service_account"`
+	PipelineRoot           string   `yaml:"pipeline_root"`
+	Timeout                Duration `yaml:"timeout"`
+	PollInterval           Duration `yaml:"poll_interval"`
+	SyncInterval           Duration `yaml:"sync_interval"`
+	TerminalSyncInterval   Duration `yaml:"terminal_sync_interval"`
+	SyncConcurrency        int      `yaml:"sync_concurrency"`
+	SyncQPS                int      `yaml:"sync_qps"`
 	// Official metadata-envoy grpc-web endpoint, not the KFP apiserver URL.
 	MetadataEndpoint  string `yaml:"metadata_endpoint"`
 	MetadataTokenFile string `yaml:"metadata_token_file"`
 }
 
 func (p Pipeline) Validate() error {
+	if p.NativeEnabled {
+		u, err := url.Parse("https://" + p.NativeArtifactEndpoint)
+		if !p.NativeObserverEnabled || !validator.IsDNS1123Label(p.NativeServiceAccount) || p.NativeParallelism < 1 || p.NativeParallelism > 16 ||
+			!validator.IsPositiveQuantity(p.NativeCPU) || !validator.IsPositiveQuantity(p.NativeMemory) ||
+			!validator.IsDNS1123Subdomain(p.NativeArtifactBucket) || !validator.IsDNS1123Subdomain(p.NativeArtifactSecret) ||
+			err != nil || u.Host != p.NativeArtifactEndpoint || u.Path != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("原生 Pipeline 需启用 observer，并配置受管执行 SA、并发/资源及无凭据的 S3 endpoint/bucket/secret")
+		}
+	}
+	if p.NativeObserverEnabled && (p.SyncConcurrency < 1 || p.SyncConcurrency > 16 || p.SyncQPS < 1 || p.SyncQPS > 100) {
+		return fmt.Errorf("原生 Workflow 观测需配置 sync_concurrency=1–16、sync_qps=1–100")
+	}
 	if !p.Enabled {
 		return nil
 	}

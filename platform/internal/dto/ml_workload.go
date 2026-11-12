@@ -48,6 +48,7 @@ type CreatePipelineVersionReq struct {
 }
 
 type SubmitPipelineRunReq struct {
+	Engine          string             `json:"engine,omitempty"` // KFP (default) or NATIVE_ARGO; immutable per run
 	Name            string             `json:"name"`
 	VersionID       uint64             `json:"versionId"`
 	VersionRevision uint64             `json:"versionRevision,omitempty"`
@@ -233,6 +234,9 @@ func validateMLValues(values []MLParameterValue) error {
 }
 
 func (r SubmitPipelineRunReq) Validate() error {
+	if r.Engine != "" && r.Engine != "KFP" && r.Engine != "NATIVE_ARGO" {
+		return mlInvalid("engine 仅支持 KFP 或 NATIVE_ARGO")
+	}
 	if r.VersionID == 0 || !validator.IsDNS1123Label(r.Name) {
 		return mlInvalid("必须提供版本 ID 和有效运行名称")
 	}

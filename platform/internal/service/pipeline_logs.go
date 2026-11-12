@@ -35,6 +35,12 @@ func (s *Service) pipelinePodRun(ctx context.Context, actor, groupID, id uint64,
 	if err := mlAllowed(ctx, s.Store, actor, &n.MLIdentity, "pipeline", permission); err != nil {
 		return nil, err
 	}
+	if n.Engine == model.PipelineEngineNativeArgo {
+		if n.Cluster != s.Cluster || n.DeletedAt != nil || n.ExecutionCleaned || n.ExternalID == nil {
+			return nil, apperr.New(apperr.CodeConflict, "原生执行尚未绑定或已清理")
+		}
+		return n, nil
+	}
 	if n.Cluster != s.Cluster || n.DeletedAt != nil || n.ExecutionCleaned || n.ExternalID == nil || *n.ExternalID != n.InstanceID {
 		return nil, apperr.New(apperr.CodeConflict, "当前执行尚未就绪或已清理，不能访问在线容器")
 	}
@@ -137,6 +143,9 @@ func (s *Service) OpenPipelineTaskLogs(ctx context.Context, actor, groupID, id u
 // Both logs and exec use KFP's verified task mapping, never an arbitrary client Pod name.
 func (s *Service) pipelineTaskPodRef(ctx context.Context, actor, groupID, id uint64, n *model.PipelineRun, taskID, container string) (k8s.PipelinePodRef, error) {
 	var empty k8s.PipelinePodRef
+	if n.Engine == model.PipelineEngineNativeArgo {
+		return s.nativePipelineTaskPodRef(ctx, n, taskID, container)
+	}
 	if !validator.IsIdempotencyKey(taskID) {
 		return empty, apperr.New(apperr.CodeInvalid, "taskId 无效")
 	}

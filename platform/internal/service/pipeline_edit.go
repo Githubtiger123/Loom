@@ -83,7 +83,7 @@ func (s *Service) UpdatePipelineVersion(ctx context.Context, actor, groupID, pip
 }
 
 func (s *Service) UpdatePipelineRun(ctx context.Context, actor, groupID, id uint64, key string, in dto.UpdatePipelineRunReq) (*model.Operation, error) {
-	if s.PipelineClient == nil {
+	if s.PipelineClient == nil && !s.PipelineConfig.NativeEnabled {
 		return nil, apperr.New(apperr.CodeUnavailable, "运行编辑需启用内置 KFP 清理执行器")
 	}
 	if in.Revision == 0 || in.VersionID == 0 || in.VersionRevision == 0 {
@@ -165,6 +165,14 @@ func (s *Service) UpdatePipelineRun(ctx context.Context, actor, groupID, id uint
 			}
 			// 新配置先暂存，执行命令继续携带旧配置来核对并清理旧 KFP Run。
 			run := n.row.(*model.PipelineRun)
+			if err := nativeLifecycleAllowed(ctx, st, run, MLPipelineEdit); err != nil {
+				return err
+			}
+			if run.Engine == model.PipelineEngineNativeArgo {
+				if err := s.validateNativeRun(spec, values); err != nil {
+					return err
+				}
+			}
 			run.PendingSpec = pending
 			if err := st.DB.WithContext(ctx).Model(run).Where("id = ? AND revision = ?", id, in.Revision).Update("pending_spec", string(pending)).Error; err != nil {
 				return err
@@ -178,7 +186,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, actor, groupID, id uint6
 	if in.Revision == 0 {
 		return nil, apperr.New(apperr.CodeInvalid, "必须提供 revision")
 	}
-	if s.PipelineClient == nil {
+	if s.PipelineClient == nil && !s.PipelineConfig.NativeEnabled {
 		return nil, apperr.New(apperr.CodeUnavailable, "启动需启用内置 KFP 执行器")
 	}
 	return s.mutate(ctx, actor, groupID, key, "pipeline.run", string(MLPipelineSubmit), "pipeline_run", fmt.Sprintf("%d/%d/start", groupID, id), in,
@@ -256,12 +264,15 @@ func applyPipelineEdit(ctx context.Context, st *repository.Store, c *MLCommand, 
 			return err
 		}
 		if err := st.DB.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&model.PipelineRunAttempt{
-			InstanceID: run.InstanceID, RunID: run.ID, Revision: run.Revision, GroupID: run.GroupID, Snapshot: snapshot}).Error; err != nil {
+			InstanceID: run.InstanceID, RunID: run.ID, Revision: run.Revision, GroupID: run.GroupID, Snapshot: snapshot,
+			Engine: run.Engine, VersionID: &run.VersionID, VersionRevision: run.VersionRevision}).Error; err != nil {
 			return err
 		}
 	}
 	run.RequestedSpec, run.VersionID, run.PendingSpec, run.ExecutionCleaned = a, pending.VersionID, nil, true
+	run.VersionRevision = &pending.VersionRevision
 	fields["requested_spec"], fields["version_id"], fields["pending_spec"] = string(a), pending.VersionID, nil
+	fields["version_revision"] = pending.VersionRevision
 	fields["execution_cleaned"], fields["sync_enabled"] = true, false
 	fields["sync_lease_owner"], fields["sync_lease_until"] = nil, nil
 	fields["kfp_sync_reason"] = nil
@@ -279,6 +290,15 @@ func (s *Service) PipelineRunAttempts(ctx context.Context, actor, groupID, id ui
 	// after 使用清理归档时的业务 revision。
 	err := s.DB.WithContext(ctx).Where("group_id = ? AND run_id = ?", groupID, id).
 		Where("revision > ?", q.After).Order("revision").Limit(q.Limit).Find(&items).Error
+	// Native snapshots contain internal compiler/admission plans, not public
+	// history DTOs. Keep historical KFP responses unchanged; never expose the
+	// new frozen spec/policy through the generic attempt-list endpoint.
+	for i := range items {
+		if items[i].Engine == model.PipelineEngineNativeArgo {
+			items[i].Snapshot = json.RawMessage(`{"schemaVersion":1,"redacted":true,"engine":"NATIVE_ARGO"}`)
+			items[i].RuntimeSummary = redactNativeStartSummary(&items[i])
+		}
+	}
 	return items, err
 }
 

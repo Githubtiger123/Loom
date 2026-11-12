@@ -1,11 +1,33 @@
 # Loom 后端
 
+原生 Pipeline 当前源码范围见 [v3 扩展说明](docs/pipeline-native-v3.md)：循环、条件、缓存、自动重试、目录产物、在线停止和自动日志归档。新增缓存迁移 000024；旧协议保留。下文各阶段为历史记录，当前状态以 v3 文档为准。仅完成源码级集成，未编译、测试、部署或验收。
+
+新增可选原生 Python Pipeline 第一版源码，最新范围、配置和未验收边界见 [说明](docs/pipeline-native-python-v1.md)；官方类型、Visitor 和输出规则复用情况见 [官方复用改造](docs/pipeline-native-official-reuse.md)。默认不启用，不替换旧 KFP 运行。
+
 当前进度：已补充认证会话管理、空间生命周期、配额预算、独立工作目录、Notebook 执行与诊断，以及 Pipeline / Trainer / KServe 业务 API。Pipeline 已接官方 KFP v2 主线；KServe 已接内置 `kserve-worker`，结构化生成和管理 `InferenceService`，并用 Watch + 周期修复同步状态。仅交付后端源码，不包含前端、实际网关部署及 Trainer 实际适配器。
 按用户要求不新增测试、不测试、不编译、不运行项目或迁移。当前改动仅做源码与文档级核对，不代表真实 MySQL、身份网关或 Kubernetes 集成已经验证。
 
 集群首次安装入口见 [install/README.md](../install/README.md)：固定版本的 Profile/Notebook 控制器、Istio、cert-manager，以及可选 KFP/KServe/Trainer。Trainer 可安装 v2.3.0 + JobSet v0.12.0 和官方运行时，业务执行器仍未实现。脚本与配置已提供但未执行，不代替 Loom 业务库初始化、应用镜像部署及访问链路核验。
 
 Pipeline 后端包含 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行 IR 快照 + KFP 状态 + MLMD 参数/产物元数据；另已补充 [普通可视化接口](docs/pipeline-visualizations.md)，提供指标解析、MinIO 产物预览和下载。前端图表及 TensorBoard 未实现。
+
+后续将 KFP 服务端收进 Loom、保留 Python SDK／IR 并直接基于 Argo 执行的规划，见 [功能迁移与改造方案](docs/pipeline-native-argo-migration.md)。这是待实施设计，不改变当前 KFP 接入主线，也不表示已完成兼容或可卸载 KFP。
+
+数据库布局见 [Pipeline 精简表结构设计](docs/pipeline-native-argo-schema.md)：复用已有定义、版本、运行与执行尝试，核心新增节点执行和产物 2 张表，缓存、定时任务、实验各 1 张，完整目标共新增 5 张；尚未实施迁移。
+
+第一阶段已补充核心两表的 GORM 模型、`000022_pipeline_native_core.sql`、受空间限定的仓储读取及旧 KFP 引擎隔离。第二阶段补充现有 pipeline-worker 内的可选 Workflow Informer、标准重试队列、内部 UID 绑定确认及已登记节点的状态回填；`pipeline.native_observer_enabled` 默认 false，不自动接管资源。原生提交、节点登记／IR runtime、产物发布及最终归档清理尚未接入，现有提交仍走 KFP。未执行迁移或重启；使用新代码启动前需显式应用迁移，否则 schema 检查将拒绝启动。详见 [分阶段实施记录](docs/pipeline-native-argo-schema.md#13-第二阶段可选原生-workflow-观测源码)。
+
+第三阶段 A 增加只读的 `GET /api/v1/groups/{gid}/pipelines/{pid}/versions/{vid}/native-compatibility?revision=N`：校验当前修订的静态 IR 子集，返回能力问题、规模和计划摘要，不返回命令／参数内容，不创建资源。纯 Workflow 构造器亦已补充，但尚未接入实际提交。`compilable=true` 仅表示支持本阶段静态计划，`runnable` 仍固定 false；完整 protobuf／SDK 和运行时兼容尚未实现。详见 [第三阶段 A 边界](docs/pipeline-native-argo-schema.md#14-第三阶段-a静态-ir-预检与确定性计划)。
+
+第三阶段 B 补上内部的暂停暂存链路源码：dry-run 后冻结小型计划／准入规格，事务登记意图和静态定义，Create 前持久化 attempted，再 GET 核验并原子绑定 UID。Workflow 始终 suspend，不开放运行入口、不装配 worker 调用或新写权限；兼容性报告仍不可运行，KFP 提交不变。native attempt 历史响应隐藏内部快照。未编译、测试、迁移或调用集群，详见 [暂存与恢复边界](docs/pipeline-native-argo-schema.md#15-第三阶段-b持久化计划与暂停暂存)。
+
+第三阶段 C 补充静态子集的真实节点／Pod 绑定源码：从冻结计划恢复调用映射，核对 Argo 节点模板、路径、父 DAG，以及真实 Pod 的 Workflow owner UID／节点注解，在同一同步事务中一次性绑定身份并回填状态。已绑定 UID 不替换，缺失不清空，冲突整批回滚并记录诊断；绑定后仍检查准入规格，只有 suspend 的生命周期差异可用于观测。未接受控 resume、operation 收尾或最终归档，不能据此启用原生运行。详见 [真实节点绑定边界](docs/pipeline-native-argo-schema.md#16-第三阶段-c静态真实节点与-pod-绑定)。
+
+第三阶段 D 增加内部首次启动原语：先持久化 PREPARED／ATTEMPTED 检查点，再按固定 UID／resourceVersion／完整规格发送 JSON Patch，原子写入启动令牌与 suspend=false，GET 核实接受结果。Informer 可补记确认，但不授予启动或完成操作；有权的执行领取方只绑定回执身份、推进 OBSERVING，通用执行回执不能绕过原生收尾。令牌冲突、再次暂停或版本改变时拒绝盲目重发；没有自动换 resourceVersion 重试或新建实例。默认入口、worker 分派和写权限仍未开放，最终归档／operation 终态未接入。详见 [首次启动与恢复边界](docs/pipeline-native-argo-schema.md#17-第三阶段-d受控首次启动与接受确认)。
+
+第三阶段 E 增加静态子集的最终归档与内部操作收尾源码：完整终态节点、真实 Pod 身份及空输出封存通过检查后，观测事务保存有界 Workflow 最终证据；持有有效授权／租约的内部执行器再原子完成 Run、operation、回执、历史与审计，精确重放不重复写入。新增 `000023_pipeline_native_final_snapshot.sql` 仅扩展已有 attempt；新代码启动前需显式应用 000022 和 000023，本轮未执行。仍无 native 公开运行入口／worker 分派或自动清理，不代表支持一般 SDK 组件或已经可运行。详见 [终态归档与收尾边界](docs/pipeline-native-argo-schema.md#18-第三阶段-e静态终态归档与操作收尾)。
+
+第三阶段 F1 增加已归档实例的显式删除／缺失观测源码：内部清理命令须先复验完整终态归档和任务证据，持久化检查点后按 UID／原 resourceVersion 执行 foreground Delete；主动 GET 及有界核对全部 Pod，防止把 Terminating、孤立或仍存在的已知 Pod 当成已清理。缺失确认不等于业务删除／编辑完成，操作仍为 OBSERVING；未接运行中停止、最终清理回执、worker 分派或公开入口，未新增表／迁移／写权限，也未执行实际删除。详见 [显式删除与恢复边界](docs/pipeline-native-argo-schema.md#19-第三阶段-f1已归档实例的显式删除与缺失观测)。
 
 前端操作入口可使用 [当前用户空间权限快照](docs/group-permissions.md)，不从全局权限推导组内权限；快照不替代各业务接口授权。
 

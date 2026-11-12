@@ -62,6 +62,18 @@ images:
 
 pipeline:
   enabled: false
+  native_observer_enabled: false
+  native_enabled: false
+  native_service_account: loom-pipeline-task
+  native_parallelism: 4
+  native_cpu: "1"
+  native_memory: 1Gi
+  native_artifact_endpoint: minio-service.kubeflow.svc.cluster.local:9000
+  native_artifact_bucket: mlpipeline
+  native_artifact_region: us-east-1
+  native_artifact_secret: loom-native-artifacts
+  native_log_archive_secret: loom-native-logs
+  native_artifact_insecure: true
   endpoint: "http://ml-pipeline.kubeflow.svc.cluster.local:8888"
   metadata_endpoint: "http://metadata-envoy-service.kubeflow.svc.cluster.local:9090"
   metadata_token_file: ""

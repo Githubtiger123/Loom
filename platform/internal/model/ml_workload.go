@@ -65,6 +65,8 @@ type PipelineRun struct {
 	MLExecutionState
 	PipelineID       uint64          `json:"pipelineId"`
 	VersionID        uint64          `json:"versionId"`
+	Engine           string          `json:"engine" gorm:"default:KFP"`
+	VersionRevision  *uint64         `json:"versionRevision,omitempty"`
 	PendingSpec      json.RawMessage `json:"pendingSpec,omitempty" gorm:"type:json"`
 	ExecutionCleaned bool            `json:"executionCleaned"`
 	// 最近一次已核验的 KFP 原始状态。失败时保留最后成功结果，并单独暴露新鲜度。
@@ -95,6 +97,33 @@ type PipelineRunAttempt struct {
 	GroupID    uint64          `json:"groupId"`
 	Snapshot   json.RawMessage `json:"snapshot" gorm:"type:json"`
 	CreatedAt  time.Time       `json:"createdAt" gorm:"default:CURRENT_TIMESTAMP(3)"`
+	// Snapshot remains immutable. Engine bindings and observations live in
+	// separate columns, and unknown historical bindings stay NULL.
+	Engine               string          `json:"engine" gorm:"default:KFP"`
+	EngineRevision       *string         `json:"-"`
+	VersionID            *uint64         `json:"versionId,omitempty"`
+	VersionRevision      *uint64         `json:"versionRevision,omitempty"`
+	ClusterID            *string         `json:"-"`
+	Namespace            *string         `json:"-"`
+	NamespaceUID         *string         `json:"-" gorm:"column:namespace_uid"`
+	WorkflowName         *string         `json:"-"`
+	WorkflowUID          *string         `json:"-" gorm:"column:workflow_uid"`
+	PlanHash             *string         `json:"-"`
+	PlanRef              *string         `json:"-"`
+	Phase                *string         `json:"phase,omitempty"`
+	Reason               *string         `json:"reason,omitempty"`
+	RuntimeSummary       json.RawMessage `json:"-" gorm:"type:json"`
+	WorkflowSnapshotRef  *string         `json:"-"`
+	WorkflowSnapshotHash *string         `json:"-"`
+	WorkflowSnapshot     json.RawMessage `json:"-" gorm:"type:json"`
+	WorkflowArchivedAt   *time.Time      `json:"-"`
+	ObservationVersion   uint64          `json:"-"`
+	ObservedAt           *time.Time      `json:"observedAt,omitempty"`
+	SyncAttemptedAt      *time.Time      `json:"syncAttemptedAt,omitempty"`
+	SyncReason           *string         `json:"syncReason,omitempty"`
+	StartedAt            *time.Time      `json:"startedAt,omitempty"`
+	FinishedAt           *time.Time      `json:"finishedAt,omitempty"`
+	UpdatedAt            time.Time       `json:"updatedAt" gorm:"autoUpdateTime:false;default:CURRENT_TIMESTAMP(3)"`
 }
 
 func (PipelineRunAttempt) TableName() string { return "tb_pipeline_run_attempt" }

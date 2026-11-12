@@ -89,6 +89,7 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}/versions/{vid}", api.PipelineVersion)
 	register(mux, api, "PUT /api/v1/groups/{gid}/pipelines/{pid}/versions/{vid}", api.UpdatePipelineVersion)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}/versions/{vid}/revisions", api.PipelineVersionRevisions)
+	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}/versions/{vid}/native-compatibility", api.PipelineVersionNativeCompatibility)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipeline-runs", api.PipelineRuns)
 	register(mux, api, "GET /api/v1/groups/{gid}/pipelines/{pid}/runs", api.PipelineRuns)
 	register(mux, api, "POST /api/v1/groups/{gid}/pipelines/{pid}/runs", api.SubmitPipelineRun)
