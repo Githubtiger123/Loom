@@ -35,6 +35,14 @@ import { TransferNotebookOwnerPage } from '@/features/notebooks/transfer-owner-p
 import { AccountLayout } from '@/features/account/account-layout';
 import { ProfilePage } from '@/features/account/profile-page';
 import { AccountPasswordPage } from '@/features/account/password-page';
+import { PipelinesPage } from '@/features/pipelines/pipelines-page';
+import { PipelineDetailPage, PipelineVersionPage } from '@/features/pipelines/pipeline-detail-page';
+import {
+  CreatePipelinePage,
+  ImportPipelineVersionPage,
+  SubmitPipelineRunPage,
+} from '@/features/pipelines/pipeline-form-pages';
+import { PipelineRunDetailPage } from '@/features/pipelines/run-detail-page';
 
 // Preserve deep links, filters, anchors and operation-navigation state from old URLs.
 function LegacyWorkspaceRedirect() {
@@ -118,11 +126,13 @@ export const router = createBrowserRouter([
           { path: 'storage', element: <StoragePage /> },
           { path: 'storage/:workspaceId', element: <WorkspaceDetailPage /> },
           { path: 'storage/:workspaceId/transfer', element: <TransferWorkspaceOwnerPage /> },
-          { path: 'pipelines', element: <ResourcePage key="pipelines" kind="pipelines" /> },
-          {
-            path: 'pipelines/:resourceId',
-            element: <ResourceDetailPage key="pipelines" kind="pipelines" />,
-          },
+          { path: 'pipelines', element: <PipelinesPage /> },
+          { path: 'pipelines/new', element: <CreatePipelinePage /> },
+          { path: 'pipelines/:pipelineId', element: <PipelineDetailPage /> },
+          { path: 'pipelines/:pipelineId/versions/new', element: <ImportPipelineVersionPage /> },
+          { path: 'pipelines/:pipelineId/versions/:versionId', element: <PipelineVersionPage /> },
+          { path: 'pipelines/:pipelineId/run', element: <SubmitPipelineRunPage /> },
+          { path: 'pipeline-runs/:runId', element: <PipelineRunDetailPage /> },
           { path: 'models', element: <ResourcePage key="models" kind="models" /> },
           {
             path: 'models/:resourceId',

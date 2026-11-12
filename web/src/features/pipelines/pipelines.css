@@ -1,0 +1,174 @@
+.pipeline-form {
+  max-width: 960px;
+}
+.pipeline-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.pipeline-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-xl);
+}
+.pipeline-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-2xl);
+}
+.pipeline-code {
+  margin: 0;
+  padding: var(--spacing-lg);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-family: 'Roboto Mono', monospace;
+  font-size: var(--font-size-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  max-height: 480px;
+}
+.pipeline-logs {
+  min-height: 200px;
+  max-height: 560px;
+}
+.pipeline-graph-scroll,
+.pipeline-table-scroll {
+  overflow: auto;
+  max-width: 100%;
+}
+.pipeline-graph-scroll {
+  max-height: 560px;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+}
+.pipeline-graph {
+  position: relative;
+}
+.pipeline-graph > svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pipeline-graph marker path {
+  fill: var(--color-text-tertiary);
+}
+.pipeline-edge {
+  fill: none;
+  stroke: var(--color-text-tertiary);
+  stroke-width: 1.5;
+}
+.pipeline-edge-artifact {
+  stroke: var(--color-text-brand);
+}
+.pipeline-edge-control {
+  stroke-dasharray: 5 4;
+}
+.pipeline-graph-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  width: 210px;
+  height: 80px;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-primary);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+.pipeline-graph-node strong {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.pipeline-graph-node[aria-pressed='true'] {
+  border-color: var(--color-border-focus);
+  outline: 1px solid var(--color-border-focus);
+}
+.pipeline-edges {
+  padding-left: var(--spacing-xl);
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-small);
+}
+.pipeline-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--spacing-lg);
+}
+.pipeline-metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl);
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--radius-md);
+}
+.pipeline-metric strong {
+  font-size: var(--font-size-h4);
+  color: var(--color-text-brand);
+}
+.pipeline-chart {
+  margin: 0;
+  max-width: 640px;
+}
+.pipeline-chart svg {
+  width: 100%;
+  height: auto;
+}
+.pipeline-chart text {
+  fill: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+}
+.pipeline-axis {
+  fill: none;
+  stroke: var(--color-border-primary);
+}
+.pipeline-diagonal {
+  stroke-dasharray: 4 4;
+}
+.pipeline-curve {
+  fill: none;
+  stroke: var(--color-text-brand);
+  stroke-width: 2;
+}
+.pipeline-matrix {
+  border-collapse: collapse;
+  width: 100%;
+}
+.pipeline-matrix th,
+.pipeline-matrix td {
+  border: 1px solid var(--color-border-secondary);
+  padding: var(--spacing-md);
+  text-align: center;
+}
+.pipeline-matrix td {
+  background: var(--color-bg-secondary);
+}
+.pipeline-image {
+  max-width: 100%;
+  max-height: 560px;
+  object-fit: contain;
+}
+.pipeline-html {
+  width: 100%;
+  min-height: 360px;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+}
+@media (max-width: 800px) {
+  .pipeline-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

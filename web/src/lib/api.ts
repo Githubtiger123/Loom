@@ -154,6 +154,52 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
   return withSession(request);
 }
 
+// Downloads use the same in-memory session and refresh rules as JSON requests.
+// Bound the stream before constructing a Blob, including chunked responses.
+export async function apiDownload(path: string, signal: AbortSignal) {
+  if (!path.startsWith('/') || path.startsWith('//')) throw new Error('下载路径必须为站内相对路径');
+  return withSession(async () => {
+    const response = await fetch(`/api/v1${path}`, {
+      signal,
+      credentials: 'same-origin',
+      redirect: 'error',
+      cache: 'no-store',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) return readResponse<never>(response);
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('下载响应为空');
+    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const part = await reader.read();
+        if (part.done) break;
+        size += part.value.byteLength;
+        if (size > 32 * 1024 * 1024) throw new Error('在线下载超过 32 MiB 上限');
+        chunks.push(new Uint8Array(part.value));
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
+    }
+    signal.throwIfAborted();
+    const disposition = response.headers.get('Content-Disposition') ?? '';
+    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+    const plain = /filename="([^"]+)"|filename=([^;]+)/i.exec(disposition);
+    let name = plain?.[1] ?? plain?.[2] ?? 'artifact';
+    if (encoded) {
+      try {
+        name = decodeURIComponent(encoded);
+      } catch {
+        /* Use the plain fallback. */
+      }
+    }
+    name = name.replace(/[\\/\u0000-\u001f\u007f]/g, '_').slice(0, 180) || 'artifact';
+    return { blob: new Blob(chunks, { type: 'application/octet-stream' }), name };
+  });
+}
+
 async function withSession<T>(request: () => Promise<T>): Promise<T> {
   const generation = epoch;
   try {
