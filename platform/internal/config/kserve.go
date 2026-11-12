@@ -9,8 +9,11 @@ import (
 
 // KServe 固定平台执行身份与部署模式；业务请求不能覆盖这些字段。
 type KServe struct {
-	Enabled         bool     `yaml:"enabled"`
-	ServiceAccount  string   `yaml:"service_account"`
+	Enabled        bool   `yaml:"enabled"`
+	ServiceAccount string `yaml:"service_account"`
+	// Optional existing storage Secret expected in the predictor SA's secrets.
+	// The API checks the binding only; it never reads or returns Secret data.
+	StorageSecret   string   `yaml:"storage_secret"`
 	DeploymentMode  string   `yaml:"deployment_mode"`
 	PollInterval    Duration `yaml:"poll_interval"`
 	ResyncInterval  Duration `yaml:"resync_interval"`
@@ -24,6 +27,9 @@ func (c KServe) Validate() error {
 	}
 	if !validator.IsDNS1123Label(c.ServiceAccount) {
 		return fmt.Errorf("kserve.service_account 必须是有效的 ServiceAccount 名称")
+	}
+	if c.StorageSecret != "" && !validator.IsSecretName(c.StorageSecret) {
+		return fmt.Errorf("kserve.storage_secret 必须是有效的 Secret 名称")
 	}
 	if c.DeploymentMode != "Standard" {
 		return fmt.Errorf("kserve.deployment_mode 首期只允许 Standard")

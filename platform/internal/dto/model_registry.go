@@ -45,6 +45,30 @@ type ArchiveModelObjectReq struct {
 	Revision uint64 `json:"revision"`
 }
 
+// Only opaque run/artifact identities are accepted; storage authority is resolved
+// from authorized published task outputs on the backend.
+type ImportPipelineModelReq struct {
+	Revision           uint64 `json:"revision"`
+	Name               string `json:"name"`
+	Description        string `json:"description"`
+	RunID              uint64 `json:"runId"`
+	InstanceID         string `json:"instanceId"`
+	ArtifactID         string `json:"artifactId"`
+	ArtifactName       string `json:"artifactName"`
+	FileName           string `json:"fileName"`
+	ModelFormat        string `json:"modelFormat"`
+	ModelFormatVersion string `json:"modelFormatVersion"`
+}
+
+func (r ImportPipelineModelReq) Validate() error {
+	if r.Revision == 0 || r.RunID == 0 || !validator.IsCanonicalUUID(r.InstanceID) || !validator.IsMetadataID(r.ArtifactID) ||
+		!validator.IsModelRegistryName(r.Name) || !validator.IsModelRegistryName(r.ArtifactName) || !validator.IsModelRegistryName(r.FileName) ||
+		!validator.MaxTextLength(r.Description, 2000) || !validator.IsModelArtifactFormat(r.ModelFormat) || !validator.IsModelArtifactFormatVersion(r.ModelFormatVersion) {
+		return modelRegistryInvalid("请提供模型 revision、有效的运行/产物标识、版本名、产物名、文件名和模型格式")
+	}
+	return nil
+}
+
 func modelRegistryInvalid(message string) error {
 	return apperr.New(apperr.CodeInvalid, message)
 }

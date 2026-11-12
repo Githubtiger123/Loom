@@ -119,6 +119,25 @@ func (s *Service) Operation(ctx context.Context, actor uint64, id string) (*mode
 		return nil, domainError(err)
 	}
 	// ML 操作先校验当前模块和对象范围，不走历史发起人/管理员快捷返回。
+	if o.TargetType == "model" || o.TargetType == "model_version" || o.TargetType == "model_artifact" {
+		var parent model.RegisteredModel
+		query := s.DB.WithContext(ctx).Model(&model.RegisteredModel{})
+		switch o.TargetType {
+		case "model":
+			query = query.Where("CAST(id AS CHAR) = ?", o.TargetKey)
+		case "model_version":
+			query = query.Where("id IN (?)", s.DB.Model(&model.ModelVersion{}).Select("model_id").Where("CAST(id AS CHAR) = ?", o.TargetKey))
+		case "model_artifact":
+			query = query.Where("id IN (?)", s.DB.Model(&model.ModelArtifact{}).Select("model_id").Where("CAST(id AS CHAR) = ?", o.TargetKey))
+		}
+		if err := query.First(&parent).Error; err != nil {
+			return nil, domainError(err)
+		}
+		if err := modelAllowed(ctx, s.Store, actor, &parent, "model.read"); err != nil {
+			return nil, err
+		}
+		return o, nil
+	}
 	if IsMLTarget(o.TargetType) {
 		if err := s.RequireMLOperation(ctx, actor, o); err != nil {
 			return nil, err
@@ -247,6 +266,9 @@ func (s *Service) Retry(ctx context.Context, actor uint64, key, id string) (*mod
 	// 重新校验当前授权与对象范围；同幂等键重放也不能绕过撤权。
 	if IsMLTarget(original.TargetType) {
 		return s.RetryMLOperation(ctx, actor, key, id)
+	}
+	if original.Action == "model.pipeline.import" {
+		return s.RetryModelImport(ctx, actor, key, original)
 	}
 	return s.mutate(ctx, actor, 0, key, "role.manage", "operation.retry", "operation", id, map[string]string{"operationId": id}, func(st *repository.Store, o *model.Operation) error {
 		original, err := st.Operation(ctx, id)

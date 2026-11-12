@@ -410,6 +410,8 @@ func saveMLIntent(ctx context.Context, st *repository.Store, o *model.Operation,
 	}
 	if o.TargetType == "kserve_service" {
 		fields["sync_enabled"], fields["sync_next_at"] = n.state.DesiredState == "SERVING", gorm.Expr("UTC_TIMESTAMP(3)")
+		// A previous rollout's Ready flag is not evidence for this publish/stop.
+		fields["kserve_ready"] = false
 	}
 	if n.configID != nil {
 		fields["config_revision_id"] = *n.configID

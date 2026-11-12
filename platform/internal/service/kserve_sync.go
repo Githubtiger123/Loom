@@ -62,7 +62,7 @@ func (s *Service) SyncNextKServe(ctx context.Context) (bool, error) {
 	if n.ExternalID != nil {
 		uid = *n.ExternalID
 	}
-	obs, readErr := s.KServeClient.ObserveKServe(ctx, k8s.KServeRef{ID: n.ID, GroupID: n.GroupID, Revision: n.Revision,
+	obs, readErr := s.KServeClient.ObserveKServe(ctx, k8s.KServeRef{ID: n.ID, GroupID: n.GroupID, Revision: n.AppliedRevision,
 		InstanceID: n.InstanceID, Namespace: n.Namespace, Name: n.Name, UID: uid})
 	return true, s.finishKServeSync(ctx, claim, obs, readErr)
 }
@@ -84,6 +84,7 @@ func (s *Service) finishKServeSync(ctx context.Context, claim *kserveSyncClaim, 
 			return q.Updates(fields).Error
 		}
 		if readErr != nil {
+			fields["kserve_ready"] = false
 			failures := min(n.SyncFailures+1, uint32(16))
 			fields["sync_failures"], fields["kserve_reason"] = failures, "KSERVE_READ_FAILED"
 			var permanent *k8s.Permanent
@@ -93,6 +94,7 @@ func (s *Service) finishKServeSync(ctx context.Context, claim *kserveSyncClaim, 
 			}
 			delay = min(15*time.Second*time.Duration(1<<min(failures-1, uint32(5))), 5*time.Minute)
 		} else if obs == nil {
+			fields["kserve_ready"] = false
 			fields["sync_failures"], fields["kserve_reason"] = n.SyncFailures+1, "KSERVE_EMPTY_OBSERVATION"
 		} else if obs.Absent {
 			fields["sync_failures"], fields["kserve_ready"] = 0, false
@@ -103,6 +105,7 @@ func (s *Service) finishKServeSync(ctx context.Context, claim *kserveSyncClaim, 
 				fields["kserve_reason"], fields["observed_at"] = "RESOURCE_NOT_FOUND", gorm.Expr("UTC_TIMESTAMP(3)")
 			}
 		} else if n.ExternalID == nil || *n.ExternalID != obs.UID || obs.InstanceID != n.InstanceID || obs.Revision != n.AppliedRevision {
+			fields["kserve_ready"] = false
 			fields["sync_failures"], fields["kserve_reason"] = n.SyncFailures+1, "IDENTITY_CONFLICT"
 		} else {
 			applyKServeObservationFields(fields, obs)
@@ -137,6 +140,7 @@ func (s *Service) ApplyKServeWatchObservation(ctx context.Context, obs *k8s.KSer
 		fields["status_reason"] = nullableString(obs.Reason)
 	}
 	return s.DB.WithContext(ctx).Model(&model.KServeService{}).
+		Where("NOT EXISTS (SELECT 1 FROM tb_operation o WHERE o.target_type = 'kserve_service' AND o.target_key = CAST(tb_kserve_service.id AS CHAR) AND o.status IN ?)", []string{"PENDING", "RUNNING", "RETRYING"}).
 		Where("id = ? AND group_id = ? AND instance_id = ? AND namespace = ? AND name = ? AND external_id = ? AND applied_revision = ? AND desired_state = 'SERVING' AND deleted_at IS NULL",
 			obs.ID, obs.GroupID, obs.InstanceID, obs.Namespace, obs.Name, obs.UID, obs.Revision).Updates(fields).Error
 }

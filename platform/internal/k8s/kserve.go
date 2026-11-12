@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -84,6 +85,9 @@ func BuildKServe(ref KServeRef, in dto.KServeSpec, serviceAccount, specHash stri
 		"serviceAccountName": serviceAccount,
 		"minReplicas":        int64(in.MinReplicas),
 		"maxReplicas":        int64(in.MaxReplicas),
+		// Official KServe propagates component metadata to Deployment/Pod.
+		// Fence rollout checks to the immutable Loom deployment command.
+		"annotations": map[string]any{annotationInstance: ref.InstanceID, annotationKServeRevision: strconv.FormatUint(ref.Revision, 10), annotationKServeSpecHash: specHash},
 	}
 	if in.DeploymentType == "MODEL" {
 		format := map[string]any{"name": in.Model.ModelFormat}
@@ -167,12 +171,15 @@ func (c *Client) ReconcileKServe(ctx context.Context, ref KServeRef, in dto.KSer
 		current, err = c.dyn.Resource(KServeGVR).Namespace(ref.Namespace).Create(ctx, want, metav1.CreateOptions{})
 	} else {
 		if current.GetDeletionTimestamp() != nil {
-			return ObserveKServeObject(current), nil
+			return c.observeKServeStandard(ctx, current)
 		}
 		annotations := current.GetAnnotations()
 		if annotations[annotationKServeRevision] == strconv.FormatUint(ref.Revision, 10) &&
-			annotations[annotationKServeSpecHash] == specHash && annotations[annotationDeploymentMode] == "Standard" {
-			return ObserveKServeObject(current), nil
+			annotations[annotationKServeSpecHash] == specHash && annotations[annotationDeploymentMode] == "Standard" &&
+			nestedString(current.Object, "spec", "predictor", "annotations", annotationInstance) == ref.InstanceID &&
+			nestedString(current.Object, "spec", "predictor", "annotations", annotationKServeRevision) == strconv.FormatUint(ref.Revision, 10) &&
+			nestedString(current.Object, "spec", "predictor", "annotations", annotationKServeSpecHash) == specHash {
+			return c.observeKServeStandard(ctx, current)
 		}
 		if err := guard(); err != nil {
 			return nil, err
@@ -195,7 +202,7 @@ func (c *Client) ReconcileKServe(ctx context.Context, ref KServeRef, in dto.KSer
 	if err != nil {
 		return nil, err
 	}
-	return ObserveKServeObject(current), nil
+	return c.observeKServeStandard(ctx, current)
 }
 
 func (c *Client) DeleteKServe(ctx context.Context, ref KServeRef, guard func() error) (*KServeObservation, error) {
@@ -229,7 +236,7 @@ func (c *Client) ObserveKServe(ctx context.Context, ref KServeRef) (*KServeObser
 	if n == nil {
 		return &KServeObservation{ID: ref.ID, GroupID: ref.GroupID, InstanceID: ref.InstanceID, Namespace: ref.Namespace, Name: ref.Name, UID: ref.UID, Revision: ref.Revision, State: "STOPPED", Absent: true}, nil
 	}
-	return ObserveKServeObject(n), nil
+	return c.observeKServeStandard(ctx, n)
 }
 
 func (c *Client) WatchKServe(ctx context.Context, resourceVersion string) (watch.Interface, error) {
@@ -259,12 +266,20 @@ func ObserveKServeObject(n *unstructured.Unstructured) *KServeObservation {
 		}
 		status, reason, message := stringValue(condition["status"]), stringValue(condition["reason"]), stringValue(condition["message"])
 		obs.Reason = boundedKServeText(strings.TrimSpace(reason+": "+message), 1024)
-		if status == "True" && obs.ObservedGeneration >= obs.Generation {
-			obs.State, obs.Ready, obs.Reason = "SERVING", true, ""
-		} else if status == "False" && kserveFailureReason(reason) && obs.ObservedGeneration >= obs.Generation {
+		if status == "True" {
+			// In Standard mode KServe copies Deployment.observedGeneration into
+			// ISVC status: it is NOT an ISVC generation acknowledgement. A live
+			// owned Deployment rollout check is required before SERVING.
+			obs.Reason = "等待核对 predictor Deployment 的当前修订与滚动发布"
+		} else if status == "False" && kserveFailureReason(reason) {
 			obs.State = "FAILED"
 		}
 		break
+	}
+	transition := nestedString(n.Object, "status", "modelStatus", "transitionStatus")
+	if transition == "InvalidSpec" || transition == "BlockedByFailedLoad" {
+		obs.State, obs.Ready = "FAILED", false
+		obs.Reason = boundedKServeText(nestedString(n.Object, "status", "modelStatus", "lastFailureInfo", "reason")+": "+nestedString(n.Object, "status", "modelStatus", "lastFailureInfo", "message"), 1024)
 	}
 	return obs
 }
@@ -284,7 +299,7 @@ func safeKServeURL(value string) string {
 		return ""
 	}
 	u, err := url.Parse(value)
-	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return ""
 	}
 	return u.String()
@@ -295,7 +310,12 @@ func kserveFailureReason(reason string) bool {
 	return strings.Contains(lower, "failed") || strings.Contains(lower, "invalid") || strings.Contains(lower, "error")
 }
 
+var kserveMessageURL = regexp.MustCompile(`(?i)(?:https?|s3|gs)://[^\s"<>]+`)
+
 func boundedKServeText(value string, max int) string {
+	// Condition/event text can contain signed download URLs. Keep them out of
+	// public metadata projections; explicit authorized container logs stay raw.
+	value = kserveMessageURL.ReplaceAllString(value, "[URL omitted]")
 	value = strings.ReplaceAll(strings.ReplaceAll(value, "\r", " "), "\n", " ")
 	runes := []rune(value)
 	if len(runes) > max {

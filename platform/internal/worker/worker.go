@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/githubtiger123/loom/platform/internal/apperr"
 	"github.com/githubtiger123/loom/platform/internal/config"
 	inframysql "github.com/githubtiger123/loom/platform/internal/infra/mysql"
 	"github.com/githubtiger123/loom/platform/internal/k8s"
@@ -83,7 +84,11 @@ func (r *Runner) loop(ctx context.Context) {
 
 func (r *Runner) execute(parent context.Context, c *repository.Claim) {
 	// 单轮执行有限时长。等待 Controller 时持久化下一次检查，不占着线程休眠。
-	ctx, cancel := context.WithTimeout(parent, 40*time.Second)
+	limit := 40 * time.Second
+	if c.Action == "model.pipeline.import" {
+		limit = 20 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(parent, limit)
 	defer cancel()
 	lock, err := repository.TargetLock(ctx, r.DB, r.Cluster, c.TargetType, c.TargetKey)
 	if err != nil {
@@ -139,6 +144,8 @@ func (r *Runner) execute(parent context.Context, c *repository.Claim) {
 			}
 		}()
 		switch c.Action {
+		case "model.pipeline.import":
+			runErr = r.Service.ExecuteModelImport(ctx, c, guard)
 		case "group.create":
 			runErr = r.createGroup(ctx, c, guard)
 		case "group.disable", "group.restore", "group.delete", "group.quota.update":
@@ -173,6 +180,20 @@ func (r *Runner) execute(parent context.Context, c *repository.Claim) {
 	if runErr == nil {
 		// 领域处理器已经在同一事务中提交成功结果，不能再次无条件回填。
 		return
+	}
+	if c.Action == "model.pipeline.import" {
+		appErr := apperr.From(runErr)
+		// Never persist raw SDK/SQL errors (including signed URLs or payloads)
+		// into public operation.lastError or audit records.
+		switch appErr.Code {
+		case apperr.CodeInvalid, apperr.CodeForbidden, apperr.CodeUnauthorized, apperr.CodeConflict, apperr.CodeNotFound, apperr.CodeQuotaExceeded:
+			runErr = &k8s.Permanent{Reason: appErr.Message}
+		default:
+			var fatal *k8s.Permanent
+			if !errors.As(runErr, &fatal) {
+				runErr = fmt.Errorf("模型导入暂不可用，请核对存储权限、空间及服务配置")
+			}
+		}
 	}
 	var pending *k8s.Pending
 	if errors.As(runErr, &pending) && time.Now().Before(c.Deadline) {

@@ -109,6 +109,18 @@ func (a *API) ModelVersion(ctx context.Context, u *model.User, r *http.Request) 
 	return a.service.ModelVersion(ctx, u.ID, ids[0], ids[1], ids[2])
 }
 
+func (a *API) ImportPipelineModel(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	ids, err := modelPathIDs(r, "mid")
+	if err != nil {
+		return nil, err
+	}
+	in, err := decode[dto.ImportPipelineModelReq](r)
+	if err != nil {
+		return nil, err
+	}
+	return a.service.ImportPipelineModel(ctx, u.ID, ids[0], ids[1], requestKey(r), in)
+}
+
 func (a *API) UpdateModelVersion(ctx context.Context, u *model.User, r *http.Request) (any, error) {
 	ids, err := modelPathIDs(r, "mid", "vid")
 	if err != nil {

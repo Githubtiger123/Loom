@@ -169,6 +169,16 @@ func main() {
 			}
 		}
 		configureKServe(runner.Service, cfg.KServe)
+		if *role == "worker" {
+			if err := configureArtifactStore(runner.Service, cfg.ArtifactStore); err != nil {
+				logger.Error("产物存储配置失败", "err", err)
+				os.Exit(1)
+			}
+			if err := configureModelStore(runner.Service, cfg); err != nil {
+				logger.Error("模型存储配置失败", "err", err)
+				os.Exit(1)
+			}
+		}
 		var runErr error
 		switch *role {
 		case "worker":
@@ -393,6 +403,9 @@ func runAPI(ctx context.Context, cfg *config.Config, logger *slog.Logger, d *dep
 		return err
 	}
 	if err := configureArtifactStore(businessService, cfg.ArtifactStore); err != nil {
+		return err
+	}
+	if err := configureModelStore(businessService, cfg); err != nil {
 		return err
 	}
 	api := handler.New(businessService, cfg.Identity, logger, authentication)

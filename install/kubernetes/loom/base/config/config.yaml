@@ -90,6 +90,7 @@ pipeline:
 kserve:
   enabled: false
   service_account: default-editor
+  storage_secret: ""
   deployment_mode: Standard
   poll_interval: 10s
   resync_interval: 5m

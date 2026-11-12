@@ -1,17 +1,15 @@
-import { createBrowserRouter, Link, Navigate, useLocation, useRouteError } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { SessionGuard } from './guard';
 import { Shell } from './shell';
 import { LoginPage } from '@/features/auth/login-page';
 import { PasswordPage } from '@/features/auth/password-page';
 import { WorkspacesPage } from '@/features/workspaces/workspaces-page';
 import { OverviewPage } from '@/features/resources/overview-page';
-import { ResourcePage } from '@/features/resources/resource-page';
-import { ResourceDetailPage } from '@/features/resources/resource-detail-page';
 import { NotebooksPage } from '@/features/notebooks/notebooks-page';
 import { NotebookDetailPage } from '@/features/notebooks/notebook-detail-page';
 import { CreateNotebookDialog } from '@/features/notebooks/create-notebook';
 import { EditNotebookPage } from '@/features/notebooks/edit-notebook-page';
-import { ErrorState } from '@/components/feedback';
+import { LegacyWorkspaceRedirect, RouteError } from './route-boundaries';
 import { CreateGroupPage } from '@/features/groups/create-group-page';
 import { GroupSettingsPage } from '@/features/groups/settings-page';
 import { MembersPage } from '@/features/groups/members-page';
@@ -43,31 +41,21 @@ import {
   SubmitPipelineRunPage,
 } from '@/features/pipelines/pipeline-form-pages';
 import { PipelineRunDetailPage } from '@/features/pipelines/run-detail-page';
+import { ModelsPage } from '@/features/models/models-page';
+import { ModelDetailPage } from '@/features/models/model-detail-page';
+import { ModelVersionPage } from '@/features/models/version-detail-page';
+import {
+  CreateModelPage,
+  EditModelPage,
+  CreateModelVersionPage,
+  EditModelVersionPage,
+  CreateModelArtifactPage,
+} from '@/features/models/model-form-pages';
+import { RegisterOutputPage } from '@/features/models/register-output-page';
+import { PublishModelPage, EditServingPage } from '@/features/models/serving-form-page';
+import { ServingPage } from '@/features/models/serving-page';
+import { ServingDetailPage } from '@/features/models/serving-detail-page';
 
-// Preserve deep links, filters, anchors and operation-navigation state from old URLs.
-function LegacyWorkspaceRedirect() {
-  const location = useLocation();
-  const pathname = location.pathname.startsWith('/g/')
-    ? location.pathname.replace(/^\/g\//, '/workspaces/')
-    : '/workspaces/new';
-  return (
-    <Navigate
-      to={{ pathname, search: location.search, hash: location.hash }}
-      state={location.state}
-      replace
-    />
-  );
-}
-
-function RouteError() {
-  const error = useRouteError();
-  return (
-    <main className="standalone">
-      <ErrorState error={error instanceof Error ? error : new Error('页面无法加载')} />
-      <Link to="/">返回工作空间</Link>
-    </main>
-  );
-}
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage />, errorElement: <RouteError /> },
   {
@@ -133,19 +121,22 @@ export const router = createBrowserRouter([
           { path: 'pipelines/:pipelineId/versions/:versionId', element: <PipelineVersionPage /> },
           { path: 'pipelines/:pipelineId/run', element: <SubmitPipelineRunPage /> },
           { path: 'pipeline-runs/:runId', element: <PipelineRunDetailPage /> },
-          { path: 'models', element: <ResourcePage key="models" kind="models" /> },
+          { path: 'models', element: <ModelsPage /> },
+          { path: 'models/new', element: <CreateModelPage /> },
+          { path: 'models/register-output', element: <RegisterOutputPage /> },
+          { path: 'models/:modelId', element: <ModelDetailPage /> },
+          { path: 'models/:modelId/edit', element: <EditModelPage /> },
+          { path: 'models/:modelId/versions/new', element: <CreateModelVersionPage /> },
+          { path: 'models/:modelId/versions/:versionId', element: <ModelVersionPage /> },
+          { path: 'models/:modelId/versions/:versionId/edit', element: <EditModelVersionPage /> },
           {
-            path: 'models/:resourceId',
-            element: <ResourceDetailPage key="models" kind="models" />,
+            path: 'models/:modelId/versions/:versionId/artifacts/new',
+            element: <CreateModelArtifactPage />,
           },
-          {
-            path: 'kserve-services',
-            element: <ResourcePage key="kserve-services" kind="kserve-services" />,
-          },
-          {
-            path: 'kserve-services/:resourceId',
-            element: <ResourceDetailPage key="kserve-services" kind="kserve-services" />,
-          },
+          { path: 'kserve-services', element: <ServingPage /> },
+          { path: 'kserve-services/new', element: <PublishModelPage /> },
+          { path: 'kserve-services/:serviceId', element: <ServingDetailPage /> },
+          { path: 'kserve-services/:serviceId/edit', element: <EditServingPage /> },
         ],
       },
       { path: '*', element: <Navigate to="/" replace /> },

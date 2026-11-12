@@ -32,6 +32,7 @@ type Service struct {
 	NativePipelineClient      *k8s.Client
 	PipelineMetadata          PipelineMetadataReader
 	PipelineArtifacts         PipelineArtifactReader
+	ModelPublisher            NativeModelPublisher
 	PipelineConfig            config.Pipeline
 	PipelineVerifier          PipelineSpaceVerifier
 	PipelineLogs              PipelineLogReader

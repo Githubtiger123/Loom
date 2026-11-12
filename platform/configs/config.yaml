@@ -132,6 +132,8 @@ pipeline:
 kserve:
   enabled: false
   service_account: default-editor
+  # 已存在并关联到上述 SA 的模型读取 Secret；只检查绑定，不读取密钥。
+  storage_secret: ""
   deployment_mode: Standard
   poll_interval: 10s
   resync_interval: 5m
@@ -171,6 +173,17 @@ artifact_store:
   region: us-east-1
   timeout: 15s
   # access_key / secret_key / session_token 通过 LOOM_ARTIFACT_STORE_* 注入。
+
+model_store:
+  # API/worker 使用独立、仅能写 loom-models/* 的账号，不能复用产物只读账号。
+  # 启用前需同时配置 artifact_store；KServe 使用独立的只读存储 Secret。
+  enabled: false
+  endpoint: "http://minio.kubeflow.svc.cluster.local:9000"
+  bucket: mlpipeline
+  prefix: loom-models
+  region: us-east-1
+  timeout: 30s
+  # access_key / secret_key / session_token 通过 LOOM_MODEL_STORE_* 注入。
 
 log:
   level: "info" # debug | info | warn | error

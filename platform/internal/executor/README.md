@@ -169,7 +169,10 @@ resource was not already terminal. RETRY does not alter its lifecycle state.
 
 Allowed reason values only: empty (OBSERVED only), REFERENCE_INVALID,
 POLICY_DENIED, EXTERNAL_UNAVAILABLE, EXTERNAL_REJECTED, RESOURCE_FAILED,
-RESOURCE_NOT_FOUND, TIMEOUT, INTERNAL_ERROR. There is no free-form error/message,
+RESOURCE_NOT_FOUND, TIMEOUT, INTERNAL_ERROR, SUBMISSION_UNCERTAIN, IDENTITY_CONFLICT.
+KServe preflight also uses KSERVE_API_MISSING, SERVICE_ACCOUNT_MISSING,
+STORAGE_SECRET_BINDING, RUNTIME_API_MISSING, SUPPORTING_RUNTIME, PREFLIGHT_FAILED.
+There is no free-form error/message,
 URL, stack, or log field; unknown JSON fields and unknown reason codes fail.
 
 The operation, domain state, sanitized history/audit, and receipt commit in one

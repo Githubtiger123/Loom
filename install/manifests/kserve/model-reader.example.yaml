@@ -1,0 +1,28 @@
+# Operator-only example, NOT included by Kustomize or the installer.
+# Copy outside version control, replace namespace/credentials, then apply.
+# Credentials must be read-only and limited to THIS workspace's model prefix.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loom-model-storage
+  namespace: REPLACE_WITH_PROFILE_NAMESPACE
+  annotations:
+    serving.kserve.io/s3-endpoint: minio-service.kubeflow.svc.cluster.local:9000
+    serving.kserve.io/s3-usehttps: "0"
+    serving.kserve.io/s3-verifyssl: "1"
+    serving.kserve.io/s3-region: us-east-1
+    serving.kserve.io/s3-usevirtualbucket: "0"
+    serving.kserve.io/s3-useanoncredential: "false"
+type: Opaque
+stringData:
+  awsAccessKeyID: REPLACE_WITH_READ_ONLY_ACCESS_KEY
+  awsSecretAccessKey: REPLACE_WITH_READ_ONLY_SECRET_KEY
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loom-model-reader
+  namespace: REPLACE_WITH_PROFILE_NAMESPACE
+automountServiceAccountToken: false
+secrets:
+  - name: loom-model-storage

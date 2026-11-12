@@ -135,6 +135,23 @@ func (r *Runner) watchKServe(ctx context.Context) {
 					observation.Absent, observation.Ready = true, false
 					observation.State, observation.Reason = "FAILED", "RESOURCE_NOT_FOUND"
 				}
+				if observation.ID == 0 || observation.GroupID == 0 || observation.InstanceID == "" || observation.UID == "" {
+					continue
+				}
+				if event.Type != watch.Deleted {
+					// Watch is a notification, not proof of a completed rollout.
+					// Read the latest owned Deployment, using the same path as poll.
+					readCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+					live, err := r.Kube.ObserveKServe(readCtx, k8s.KServeRef{ID: observation.ID, GroupID: observation.GroupID, Revision: observation.Revision, InstanceID: observation.InstanceID, Namespace: observation.Namespace, Name: observation.Name, UID: observation.UID})
+					cancel()
+					if err != nil {
+						continue
+					} // periodic sync retains bounded retry/backoff
+					if live.Absent {
+						live.State, live.Reason = "FAILED", "RESOURCE_NOT_FOUND"
+					}
+					observation = live
+				}
 				applyCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				err := r.Service.ApplyKServeWatchObservation(applyCtx, observation)
 				cancel()

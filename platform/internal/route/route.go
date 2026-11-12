@@ -121,6 +121,8 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "POST /api/v1/groups/{gid}/trainer-jobs/{jid}/stop", api.StopTrainerJob)
 	register(mux, api, "DELETE /api/v1/groups/{gid}/trainer-jobs/{jid}", api.DeleteTrainerJob)
 	register(mux, api, "GET /api/v1/groups/{gid}/trainer-jobs/{jid}/history", api.TrainerJobHistory)
+	register(mux, api, "GET /api/v1/groups/{gid}/kserve-runtimes", api.KServeRuntimes)
+	register(mux, api, "POST /api/v1/groups/{gid}/kserve-preflight", api.KServePreflight)
 	register(mux, api, "GET /api/v1/groups/{gid}/kserve-services", api.KServeServices)
 	register(mux, api, "POST /api/v1/groups/{gid}/kserve-services", api.CreateKServe)
 	register(mux, api, "GET /api/v1/groups/{gid}/kserve-services/{sid}", api.KServeService)
@@ -130,6 +132,9 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "DELETE /api/v1/groups/{gid}/kserve-services/{sid}", api.DeleteKServe)
 	register(mux, api, "GET /api/v1/groups/{gid}/kserve-services/{sid}/revisions", api.KServeRevisions)
 	register(mux, api, "GET /api/v1/groups/{gid}/kserve-services/{sid}/history", api.KServeHistory)
+	register(mux, api, "POST /api/v1/groups/{gid}/kserve-services/{sid}/predict", api.PredictKServe)
+	register(mux, api, "GET /api/v1/groups/{gid}/kserve-services/{sid}/diagnostics", api.KServeDiagnostics)
+	register(mux, api, "GET /api/v1/groups/{gid}/kserve-services/{sid}/logs", api.KServeLogs)
 
 	// 模型注册只保存逻辑模型、版本和外部产物元数据；模型文件不进入 MySQL。
 	register(mux, api, "GET /api/v1/groups/{gid}/models", api.Models)
@@ -139,6 +144,7 @@ func New(api *handler.API) http.Handler {
 	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/archive", api.ArchiveModel)
 	register(mux, api, "GET /api/v1/groups/{gid}/models/{mid}/versions", api.ModelVersions)
 	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/versions", api.CreateModelVersion)
+	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/import-pipeline-artifact", api.ImportPipelineModel)
 	register(mux, api, "GET /api/v1/groups/{gid}/models/{mid}/versions/{vid}", api.ModelVersion)
 	register(mux, api, "PATCH /api/v1/groups/{gid}/models/{mid}/versions/{vid}", api.UpdateModelVersion)
 	register(mux, api, "POST /api/v1/groups/{gid}/models/{mid}/versions/{vid}/archive", api.ArchiveModelVersion)

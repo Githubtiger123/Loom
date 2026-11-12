@@ -8,6 +8,7 @@ package k8s
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/githubtiger123/loom/platform/internal/k8s/podexec"
 	"github.com/githubtiger123/loom/platform/internal/k8s/podlog"
@@ -66,11 +67,12 @@ func (c Config) withDefaults() Config {
 
 // Client 封装平台需要的三类客户端。
 type Client struct {
-	cfg  Config
-	kube kubernetes.Interface
-	dyn  dynamic.Interface
-	logs *podlog.Reader
-	exec *podexec.Reader
+	cfg     Config
+	kube    kubernetes.Interface
+	dyn     dynamic.Interface
+	logs    *podlog.Reader
+	exec    *podexec.Reader
+	predict kubernetes.Interface
 }
 
 // New 用给定 rest.Config 构造客户端（本地开发用 kubeconfig）。
@@ -90,7 +92,18 @@ func New(restCfg *rest.Config, cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build pod log client: %w", err)
 	}
-	return &Client{cfg: cfg.withDefaults(), kube: kube, dyn: dyn, logs: podlog.New(logClient), exec: podexec.New(kube, restCfg)}, nil
+	predictConfig := rest.CopyConfig(restCfg)
+	predictConfig.Timeout = 0 // bounded by the per-request context, not global API timeout
+	predictHTTP, err := rest.HTTPClientFor(predictConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build prediction transport: %w", err)
+	}
+	predictHTTP.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	predictClient, err := kubernetes.NewForConfigAndClient(predictConfig, predictHTTP)
+	if err != nil {
+		return nil, fmt.Errorf("build prediction client: %w", err)
+	}
+	return &Client{cfg: cfg.withDefaults(), kube: kube, dyn: dyn, logs: podlog.New(logClient), exec: podexec.New(kube, restCfg), predict: predictClient}, nil
 }
 
 // NewInCluster 使用 Pod 内的 ServiceAccount。

@@ -31,7 +31,7 @@ func ClaimOperation(ctx context.Context, db *gorm.DB, cluster, token string) (*C
 	err := InTx(ctx, db, func(st *Store) error {
 		o := &model.Operation{}
 		err := st.query(ctx, false).Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
-			Where("cluster = ? AND action IN ?", cluster, []string{"group.create", "group.disable", "group.restore", "group.delete", "group.quota.update", "workspace.delete", "user.DISABLED", "member.roles.replace", "access.reconcile", "notebook.create", "notebook.start", "notebook.stop", "notebook.update", "notebook.delete"}).
+			Where("cluster = ? AND action IN ?", cluster, []string{"group.create", "group.disable", "group.restore", "group.delete", "group.quota.update", "workspace.delete", "user.DISABLED", "member.roles.replace", "access.reconcile", "notebook.create", "notebook.start", "notebook.stop", "notebook.update", "notebook.delete", "model.pipeline.import"}).
 			Where("(status IN ? AND next_attempt_at <= UTC_TIMESTAMP(3)) OR (status = ? AND lease_until < UTC_TIMESTAMP(3))",
 				[]string{"PENDING", "RETRYING"}, "RUNNING").Order("next_attempt_at").Order("id").First(o).Error
 		if err != nil {

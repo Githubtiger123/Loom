@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Table } from '@atomus';
 import { ErrorState, NoData } from '@/components/feedback';
 import { useMounted } from '@/lib/use-mounted';
+import { useGroupPermissions } from '@/lib/use-group-permissions';
 import { pipelineApi, pipelineKeys } from '../api';
 import type { Preview, Run, View } from '../types';
 import { QueryState } from './query-state';
 
 export function VisualizationsPanel({ groupId, run }: { groupId: string; run: Run }) {
+  const permissions = useGroupPermissions(groupId);
   const query = useQuery({
     queryKey: pipelineKeys.query(groupId, 'visualizations', run.id, run.instanceId, run.revision),
     queryFn: ({ signal }) => pipelineApi.visualizations(groupId, run, signal),
@@ -54,6 +57,18 @@ export function VisualizationsPanel({ groupId, run }: { groupId: string; run: Ru
                     artifact={artifact.artifactId}
                     enabled={artifact.contentStatus === 'ON_DEMAND'}
                   />
+                  {run.engine === 'NATIVE_ARGO' &&
+                    artifact.contentStatus === 'ON_DEMAND' &&
+                    permissions.can('model.read') &&
+                    permissions.can('model.version.create') &&
+                    permissions.can('model.artifact.create') && (
+                      <Link
+                        className="text-link"
+                        to={`/workspaces/${groupId}/models/register-output?runId=${run.id}&instanceId=${encodeURIComponent(run.instanceId)}&artifactId=${encodeURIComponent(artifact.artifactId)}`}
+                      >
+                        注册模型版本
+                      </Link>
+                    )}
                 </div>
               </Card>
             ))

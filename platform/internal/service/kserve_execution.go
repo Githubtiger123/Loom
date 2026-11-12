@@ -113,6 +113,23 @@ func (s *Service) executeKServeClaim(ctx context.Context, claim *MLExecutionClai
 
 	var observation *k8s.KServeObservation
 	if c.DesiredState == "SERVING" {
+		// No Secret data, weights, PodSpec or runtime images are copied into Loom.
+		// Check live official resources outside transactions, again on each retry.
+		preflight, checkErr := s.KServeClient.KServePreflight(ctx, c.Namespace, s.KServeConfig.ServiceAccount, s.KServeConfig.StorageSecret, *c.KServe)
+		if checkErr != nil {
+			return checkErr
+		}
+		if !preflight.Ready {
+			for _, check := range preflight.Checks {
+				if !check.Passed {
+					return kserveProblem(check.Code, true)
+				}
+			}
+			return kserveProblem("PREFLIGHT_FAILED", true)
+		}
+		if err := guard(); err != nil {
+			return err
+		}
 		body, _ := json.Marshal(c.KServe)
 		observation, err = s.KServeClient.ReconcileKServe(ctx, ref, *c.KServe, s.KServeConfig.ServiceAccount, mlHash(body), guard)
 	} else {

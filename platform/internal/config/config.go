@@ -37,6 +37,7 @@ type Config struct {
 	Log           Log           `yaml:"log"`
 	LogArchive    LogArchive    `yaml:"log_archive"`
 	ArtifactStore ArtifactStore `yaml:"artifact_store"`
+	ModelStore    ArtifactStore `yaml:"model_store"`
 }
 
 // Server 是 HTTP 服务参数。
@@ -202,6 +203,7 @@ func Default() *Config {
 		Log:           Log{Level: "info"},
 		LogArchive:    LogArchive{Prefix: "logs", Region: "us-east-1", Timeout: Duration(15 * time.Second)},
 		ArtifactStore: defaultArtifactStore(),
+		ModelStore:    ArtifactStore{Prefix: "loom-models", Region: "us-east-1", Timeout: Duration(30 * time.Second)},
 	}
 }
 
@@ -325,6 +327,7 @@ func applyEnv(c *Config) {
 	envInt(&c.Pipeline.SyncQPS, "LOOM_PIPELINE_SYNC_QPS")
 	envBool(&c.KServe.Enabled, "LOOM_KSERVE_ENABLED")
 	envStr(&c.KServe.ServiceAccount, "LOOM_KSERVE_SERVICE_ACCOUNT")
+	envStr(&c.KServe.StorageSecret, "LOOM_KSERVE_STORAGE_SECRET")
 	envStr(&c.KServe.DeploymentMode, "LOOM_KSERVE_DEPLOYMENT_MODE")
 	envDuration(&c.KServe.PollInterval, "LOOM_KSERVE_POLL_INTERVAL")
 	envDuration(&c.KServe.ResyncInterval, "LOOM_KSERVE_RESYNC_INTERVAL")
@@ -369,6 +372,15 @@ func applyEnv(c *Config) {
 	envStr(&c.ArtifactStore.SecretKey, "LOOM_ARTIFACT_STORE_SECRET_KEY")
 	envStr(&c.ArtifactStore.SessionToken, "LOOM_ARTIFACT_STORE_SESSION_TOKEN")
 	envDuration(&c.ArtifactStore.Timeout, "LOOM_ARTIFACT_STORE_TIMEOUT")
+	envBool(&c.ModelStore.Enabled, "LOOM_MODEL_STORE_ENABLED")
+	envStr(&c.ModelStore.Endpoint, "LOOM_MODEL_STORE_ENDPOINT")
+	envStr(&c.ModelStore.Bucket, "LOOM_MODEL_STORE_BUCKET")
+	envStr(&c.ModelStore.Prefix, "LOOM_MODEL_STORE_PREFIX")
+	envStr(&c.ModelStore.Region, "LOOM_MODEL_STORE_REGION")
+	envStr(&c.ModelStore.AccessKey, "LOOM_MODEL_STORE_ACCESS_KEY")
+	envStr(&c.ModelStore.SecretKey, "LOOM_MODEL_STORE_SECRET_KEY")
+	envStr(&c.ModelStore.SessionToken, "LOOM_MODEL_STORE_SESSION_TOKEN")
+	envDuration(&c.ModelStore.Timeout, "LOOM_MODEL_STORE_TIMEOUT")
 }
 
 func envStr(dst *string, key string) {

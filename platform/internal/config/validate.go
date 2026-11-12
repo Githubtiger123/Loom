@@ -150,6 +150,12 @@ func (c *Config) Validate() error {
 	if err := c.ArtifactStore.Validate(); err != nil {
 		return err
 	}
+	if err := c.ModelStore.Validate(); err != nil {
+		return fmt.Errorf("model_store: %w", err)
+	}
+	if c.ModelStore.Enabled && (!c.ArtifactStore.Enabled || (c.ModelStore.Prefix != "loom-models" && !strings.HasPrefix(c.ModelStore.Prefix, "loom-models/"))) {
+		return fmt.Errorf("model_store requires artifact_store.enabled and a loom-models/ prefix")
+	}
 	return c.validateAuth()
 }
 

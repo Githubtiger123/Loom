@@ -86,6 +86,18 @@ func configureArtifactStore(base *service.Service, cfg config.ArtifactStore) err
 	return nil
 }
 
+func configureModelStore(base *service.Service, cfg *config.Config) error {
+	if !cfg.ModelStore.Enabled {
+		return nil
+	}
+	publisher, err := artifactstore.NewModelPublisher(cfg.ArtifactStore, cfg.ModelStore)
+	if err != nil {
+		return err
+	}
+	base.ModelPublisher = publisher
+	return nil
+}
+
 type boundPipelineVerifier struct {
 	client *k8s.Client
 	owner  string

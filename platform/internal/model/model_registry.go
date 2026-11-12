@@ -21,18 +21,21 @@ type RegisteredModel struct {
 func (RegisteredModel) TableName() string { return "tb_model" }
 
 type ModelVersion struct {
-	ID                  uint64     `json:"id" gorm:"primaryKey;autoIncrement"`
-	GroupID             uint64     `json:"groupId"`
-	ModelID             uint64     `json:"modelId"`
-	Name                string     `json:"name"`
-	Description         string     `json:"description"`
-	SourcePipelineRunID *uint64    `json:"sourcePipelineRunId"`
-	CreatedBy           *uint64    `json:"createdBy"`
-	Revision            uint64     `json:"revision" gorm:"default:1"`
-	Status              string     `json:"status"`
-	CreatedAt           time.Time  `json:"createdAt" gorm:"default:CURRENT_TIMESTAMP(3)"`
-	UpdatedAt           time.Time  `json:"updatedAt" gorm:"autoUpdateTime:false;default:CURRENT_TIMESTAMP(3)"`
-	DeletedAt           *time.Time `json:"deletedAt"`
+	ID                       uint64     `json:"id" gorm:"primaryKey;autoIncrement"`
+	GroupID                  uint64     `json:"groupId"`
+	ModelID                  uint64     `json:"modelId"`
+	Name                     string     `json:"name"`
+	Description              string     `json:"description"`
+	SourcePipelineRunID      *uint64    `json:"sourcePipelineRunId"`
+	SourcePipelineInstanceID *string    `json:"sourcePipelineInstanceId"`
+	SourcePipelineArtifactID *uint64    `json:"sourcePipelineArtifactId"`
+	ImportOperationID        *string    `json:"importOperationId"`
+	CreatedBy                *uint64    `json:"createdBy"`
+	Revision                 uint64     `json:"revision" gorm:"default:1"`
+	Status                   string     `json:"status"`
+	CreatedAt                time.Time  `json:"createdAt" gorm:"default:CURRENT_TIMESTAMP(3)"`
+	UpdatedAt                time.Time  `json:"updatedAt" gorm:"autoUpdateTime:false;default:CURRENT_TIMESTAMP(3)"`
+	DeletedAt                *time.Time `json:"deletedAt"`
 }
 
 func (ModelVersion) TableName() string { return "tb_model_version" }
