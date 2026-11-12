@@ -6,7 +6,7 @@ export function QueryState<T>({
   query,
   children,
 }: {
-  query: UseQueryResult<T>;
+  query: UseQueryResult<T, unknown>;
   children: (data: T) => ReactNode;
 }) {
   if (query.isError)

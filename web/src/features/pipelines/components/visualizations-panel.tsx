@@ -368,7 +368,7 @@ function ArtifactPreview({ preview }: { preview: Preview }) {
       const rows = (table.rows as string[][]).map((cells, index) => ({ index, cells }));
       return (
         <div className="stack">
-          <Table
+          <Table<{ index: number; cells: string[] }>
             rows={rows}
             rowKey={(row) => String(row.index)}
             caption={preview.name}
