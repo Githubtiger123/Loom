@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Input, Select } from '@atomus';
 import { ErrorState, PageHeading } from '@/components/feedback';
+import type { Group } from '@/lib/types';
 import { registryApi, modelKeys, servingKeys, servingPath, noAccess } from './api';
 import { formats, servingPayload } from './form-schema';
 import { activeModel, activeVersion, publishable } from './policy';
@@ -11,6 +12,8 @@ import { ModelBoundary, type Access } from './components/boundary';
 import { CommandForm } from './components/command-form';
 import { resultID } from './operation-result';
 import { QueryState } from './components/query-state';
+import { RuntimeSelect } from './components/runtime-select';
+import { ServingPreflight } from './components/serving-preflight';
 
 export function PublishModelPage() {
   const [search] = useSearchParams();
@@ -83,7 +86,12 @@ function PublishContext({
               <QueryState query={artifact}>
                 {(file) =>
                   publishable(parent, row, file) && formats.includes(file.modelFormat) ? (
-                    <ServingForm g={g} artifact={file} />
+                    <ServingForm
+                      key={`${g}/${access.data?.userId}`}
+                      g={g}
+                      artifact={file}
+                      access={access}
+                    />
                   ) : (
                     <ErrorState
                       error={new Error('需要有效模型、READY 版本和 KServe 支持的有效产物')}
@@ -180,7 +188,13 @@ function ExistingArtifactContext({
               <QueryState query={artifact}>
                 {(artifact) =>
                   activeVersion(version) && publishable(parent, version, artifact) ? (
-                    <ServingForm g={g} artifact={artifact} row={row} />
+                    <ServingForm
+                      key={`${g}/${access.data?.userId}/${row.instanceId}`}
+                      g={g}
+                      artifact={artifact}
+                      row={row}
+                      access={access}
+                    />
                   ) : (
                     <ErrorState error={new Error('原产物或版本已归档／不再 READY')} />
                   )
@@ -197,11 +211,14 @@ function ServingForm({
   g,
   artifact,
   row,
+  access,
 }: {
   g: string;
   artifact: Artifact;
   row?: ServingService;
+  access: Access;
 }) {
+  const group = useOutletContext<Group>();
   const [snapshot] = useState(row);
   const [value, setValue] = useState({
     name: row?.name ?? '',
@@ -214,6 +231,16 @@ function ServingForm({
     memory: row?.spec.resources.memory ?? '2Gi',
     gpu: String(row?.spec.resources.gpu ?? 0),
   });
+  const checkIdentity = JSON.stringify([
+    g,
+    group.revision,
+    group.infrastructureOwner,
+    access.data?.userId,
+    snapshot?.instanceId,
+    snapshot?.revision,
+    artifact.revision,
+    value,
+  ]);
   const input = (
     key: 'name' | 'runtime' | 'minReplicas' | 'maxReplicas' | 'cpu' | 'memory' | 'gpu',
     label: string,
@@ -283,10 +310,19 @@ function ServingForm({
             { value: 'v2', label: 'Open Inference v2' },
           ]}
         />
-        {input(
-          'runtime',
-          'Runtime（可选）',
-          '留空由 KServe 按模型格式自动匹配；指定时必须是集群已有的 Runtime。',
+        {access.can('kserve.read') ? (
+          <RuntimeSelect
+            g={g}
+            userId={access.data?.userId}
+            artifact={artifact}
+            protocol={value.protocol}
+            value={value.runtime}
+            onChange={(runtime) => setValue({ ...value, runtime })}
+          />
+        ) : (
+          <Alert color="warning" title="无法发现 Runtime">
+            需要 kserve.read 权限；保留原 Runtime，未指定时由 KServe 自动选择。
+          </Alert>
         )}
         <div className="model-fields">
           {input('minReplicas', '最小副本')}
@@ -295,6 +331,18 @@ function ServingForm({
           {input('memory', '每副本内存')}
           {input('gpu', '每副本 GPU 数量')}
         </div>
+        {access.can('kserve.read') && access.can('kserve.create') ? (
+          <ServingPreflight
+            key={checkIdentity}
+            g={g}
+            identity={checkIdentity}
+            payload={() => servingPayload(value)}
+          />
+        ) : (
+          <Alert color="warning" title="发布前检查不可用">
+            检查接口需要 kserve.read 和 kserve.create 权限；不影响按现有权限保存配置。
+          </Alert>
+        )}
       </CommandForm>
     </div>
   );

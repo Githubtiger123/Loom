@@ -12,6 +12,9 @@ import type { ServingService } from './types';
 import { ModelBoundary, type Access } from './components/boundary';
 import { PageControls, QueryState } from './components/query-state';
 import { RegistryActionDialog, type RegistryAction } from './components/registry-action';
+import { ServingDiagnostics } from './components/serving-diagnostics';
+import { ServingPreflight } from './components/serving-preflight';
+import { servingPreflightPayload } from './form-schema';
 
 export function ServingDetailPage() {
   const { serviceId = '' } = useParams();
@@ -19,7 +22,7 @@ export function ServingDetailPage() {
     <ModelBoundary permission="kserve.read">
       {(g, group, access) => (
         <ServiceDetail
-          key={`${g}/${serviceId}`}
+          key={`${g}/${group.revision}/${group.infrastructureOwner}/${access.data?.userId}/${serviceId}`}
           g={g}
           id={serviceId}
           access={access}
@@ -64,14 +67,37 @@ function ServiceDetail({
                 { value: 'overview', label: '发布状态' },
                 { value: 'revisions', label: '配置修订' },
                 { value: 'history', label: '发布历史' },
+                { value: 'diagnostics', label: '诊断／日志' },
                 { value: 'predict', label: '推理验收' },
               ]}
             />
             {tab === 'overview' && <ServiceOverview row={row} g={g} />}
             {tab === 'revisions' && (
-              <RevisionPanel g={g} row={row} access={access} writable={writable} />
+              <RevisionPanel
+                key={`${row.instanceId}/${row.revision}/${access.data?.userId}`}
+                g={g}
+                row={row}
+                access={access}
+                writable={writable}
+              />
             )}
             {tab === 'history' && <HistoryPanel g={g} row={row} />}
+            {tab === 'diagnostics' &&
+              (!access.allows('kserve.logs', row, 'kserve') ? (
+                <ErrorState error={noAccess()} />
+              ) : !writable || row.deletedAt || !row.externalId ? (
+                <NoData
+                  title="暂无可诊断的集群资源"
+                  description="空间需处于 ACTIVE，且服务已绑定 InferenceService；等待资源创建或重新发布后再查看。不要求服务已 Ready。"
+                />
+              ) : (
+                <ServingDiagnostics
+                  key={`${g}/${row.instanceId}/${row.revision}/${row.externalId}/${row.appliedRevision}/${row.createdBy}/${access.data?.userId}`}
+                  g={g}
+                  row={row}
+                  userId={access.data?.userId}
+                />
+              ))}
             {tab === 'predict' &&
               (access.allows('kserve.invoke', row, 'kserve') && writable ? (
                 <PredictPanel
@@ -185,9 +211,13 @@ function ServiceOverview({ row, g }: { row: ServingService; g: string }) {
             {row.desiredState} / {row.observedState}
           </dd>
           <dt>KServe Ready</dt>
+          <dd>{row.kserveReady ? 'True' : 'False'}</dd>
+          <dt>ISVC generation</dt>
+          <dd>{row.kserveGeneration}</dd>
+          <dt>Predictor observedGeneration</dt>
           <dd>
-            {row.kserveReady ? 'True' : 'False'} · generation {row.kserveObservedGeneration}/
-            {row.kserveGeneration}
+            {row.kserveObservedGeneration}（Standard 模式为 Deployment 观测代次，不与 ISVC
+            直接比较）
           </dd>
           <dt>业务修订 / 已应用</dt>
           <dd>
@@ -245,7 +275,8 @@ function RevisionPanel({
   writable: boolean;
 }) {
   const [after, setAfter] = useState(0),
-    [action, setAction] = useState<RegistryAction>();
+    [action, setAction] = useState<RegistryAction>(),
+    [checkId, setCheckId] = useState<number>();
   const query = useQuery({
     queryKey: servingKeys.query(g, 'revisions', row.id, row.revision, after),
     queryFn: ({ signal }) => registryApi.revisions(g, String(row.id), after, signal),
@@ -285,25 +316,62 @@ function RevisionPanel({
                   !row.deletedAt &&
                   writable &&
                   access.allows('kserve.deploy', row, 'kserve') && (
-                    <Button
-                      hierarchy="outline"
-                      onClick={() =>
-                        setAction({
-                          title: '发布此修订',
-                          description: `使用配置 #${r.id} 发布，后端将重新验证来源产物是否有效和 READY。`,
-                          path: `${servingPath(g, row.id)}/deploy`,
-                          body: { revision: row.revision, revisionId: r.id },
-                          destination: `/workspaces/${g}/kserve-services/${row.id}`,
-                        })
-                      }
-                    >
-                      发布／重新发布
-                    </Button>
+                    <div className="actions">
+                      {access.can('kserve.create') && (
+                        <Button hierarchy="outline" onClick={() => setCheckId(r.id)}>
+                          发布前检查
+                        </Button>
+                      )}
+                      <Button
+                        hierarchy="outline"
+                        onClick={() =>
+                          setAction({
+                            title: '发布此修订',
+                            description: `使用配置 #${r.id} 发布，后端将重新验证来源产物是否有效和 READY。`,
+                            path: `${servingPath(g, row.id)}/deploy`,
+                            body: { revision: row.revision, revisionId: r.id },
+                            destination: `/workspaces/${g}/kserve-services/${row.id}`,
+                          })
+                        }
+                      >
+                        发布／重新发布
+                      </Button>
+                    </div>
                   ),
               },
             ]}
           />
           <PageControls after={after} next={page.nextAfter} onChange={setAfter} />
+          {checkId !== undefined &&
+            writable &&
+            !row.deletedAt &&
+            access.can('kserve.create') &&
+            access.allows('kserve.deploy', row, 'kserve') &&
+            page.items
+              .filter((r) => r.id === checkId)
+              .map((r) => {
+                const payload = servingPreflightPayload(row.name, r.spec);
+                const identity = JSON.stringify([
+                  g,
+                  row.instanceId,
+                  row.revision,
+                  row.createdBy,
+                  access.data?.userId,
+                  r.id,
+                  payload,
+                ]);
+                return (
+                  <div className="stack" key={identity}>
+                    <p>
+                      检查配置 #{r.id}（r{r.revision}），不会发布或修改当前服务。
+                    </p>
+                    <ServingPreflight g={g} identity={identity} payload={() => payload} />
+                    <Button hierarchy="link" onClick={() => setCheckId(undefined)}>
+                      关闭检查
+                    </Button>
+                  </div>
+                );
+              })}
           {action && access.allows('kserve.deploy', row, 'kserve') && (
             <RegistryActionDialog groupId={g} action={action} close={() => setAction(undefined)} />
           )}

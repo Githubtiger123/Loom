@@ -88,6 +88,8 @@ kserve:
 
 ### 升级与验收边界
 
+前端已接入 Runtime 自动发现下拉、创建／编辑及历史配置修订的手动 Preflight、服务详情的 Pod／模型初始化诊断、事件和按需容器日志。Preflight 仅显示元数据检查，不标记为模型就绪；更改表单后原结果失效。日志绑定服务 instance/revision、具体 Pod UID 和容器，只有可见且已授权的面板加载，不自动遍历所有副本或持续 follow；上一轮日志不存在时明确报错。相关入口和限制见 `web/src/features/models/README.md`。
+
 显式执行迁移至 000026，更新机器 RBAC、API/kserve-worker，配置 SA/存储身份后再启用功能。已存在但没有新组件注解的服务不会被虚报 Ready，需显式重新发布使官方 Controller 传播 rollout 标识。默认配置仍保持关闭，不擅自改变现有运行环境。
 
 本轮未运行测试、类型检查、编译、项目启动、数据库迁移或集群写入。模型加载、存储权限、镜像可达、Webhook/Istio、真实推理仍需部署后验收。不宣称支持完整 KServe 的 Transformer、Explainer、Canary、ModelMesh、Knative、LLMInferenceService 或多节点模型；首期是 Standard 单 predictor（MODEL/CUSTOM）后端。

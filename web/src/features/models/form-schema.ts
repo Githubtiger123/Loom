@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ServingRequest, ServingSpec } from './types';
 export const nameSchema = z
   .string()
   .min(1, '请填写名称')
@@ -71,7 +72,7 @@ export function servingPayload(value: {
   cpu: string;
   memory: string;
   gpu: string;
-}) {
+}): ServingRequest {
   if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(value.name) || value.name.length > 63)
     throw new Error('服务名使用最长 63 字符的小写字母、数字和中划线');
   if (!Number.isSafeInteger(value.artifactId) || value.artifactId < 1)
@@ -85,9 +86,10 @@ export function servingPayload(value: {
     max < min ||
     max > 128 ||
     gpu < 0 ||
-    gpu > 128
+    gpu > 64
   )
-    throw new Error('副本必须在 1–128 且 max≥min；GPU 为 0–128 整数');
+    throw new Error('副本必须在 1–128 且 max≥min；GPU 为 0–64 整数');
+  if (value.protocol !== 'v1' && value.protocol !== 'v2') throw new Error('请选择 v1 或 v2 协议');
   if (!value.cpu.trim() || !value.memory.trim()) throw new Error('请填写 CPU 与内存');
   if (
     value.runtime &&
@@ -102,5 +104,31 @@ export function servingPayload(value: {
     maxReplicas: max,
     resources: { cpu: value.cpu, memory: value.memory, gpu },
     model: { artifactId: value.artifactId, ...(value.runtime ? { runtime: value.runtime } : {}) },
+  };
+}
+
+// Registry-derived fields are immutable snapshots, not client-supplied request fields.
+export function servingPreflightPayload(name: string, spec: ServingSpec): ServingRequest {
+  const model = spec.model;
+  return {
+    name,
+    deploymentType: spec.deploymentType,
+    protocol: spec.protocol,
+    minReplicas: spec.minReplicas,
+    maxReplicas: spec.maxReplicas,
+    resources: spec.resources,
+    ...(spec.deploymentType === 'MODEL' && model
+      ? {
+          model: model.artifactId
+            ? { artifactId: model.artifactId, runtime: model.runtime }
+            : {
+                runtime: model.runtime,
+                storageUri: model.storageUri,
+                modelFormat: model.modelFormat,
+                modelFormatVersion: model.modelFormatVersion,
+              },
+        }
+      : {}),
+    ...(spec.deploymentType === 'CUSTOM' ? { custom: spec.custom } : {}),
   };
 }

@@ -4,6 +4,12 @@ import type {
   Artifact,
   Model,
   Prediction,
+  ServingDiagnostics,
+  ServingLogQuery,
+  ServingLogs,
+  ServingPreflight,
+  ServingRequest,
+  ServingRuntimeList,
   ServingHistory,
   ServingRevision,
   ServingService,
@@ -66,6 +72,21 @@ export const registryApi = {
     }),
   service: (g: string, id: string, signal: AbortSignal) =>
     api<ServingService>(servingPath(g, id), { signal }),
+  runtimes: (g: string, signal: AbortSignal) => {
+    modelPath(g);
+    return api<ServingRuntimeList>(`/groups/${g}/kserve-runtimes`, { signal });
+  },
+  preflight: (g: string, body: ServingRequest, signal: AbortSignal) => {
+    modelPath(g);
+    return api<ServingPreflight>(`/groups/${g}/kserve-preflight`, { method: 'POST', body, signal });
+  },
+  diagnostics: (g: string, id: number, signal: AbortSignal) =>
+    api<ServingDiagnostics>(`${servingPath(g, id)}/diagnostics`, { signal }),
+  logs: (g: string, id: number, query: ServingLogQuery, signal: AbortSignal) => {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) params.set(key, String(value));
+    return api<ServingLogs>(`${servingPath(g, id)}/logs?${params}`, { signal });
+  },
   revisions: (g: string, id: string, after: number, signal: AbortSignal) =>
     api<Page<ServingRevision>>(`${servingPath(g, id)}/revisions?after=${after}&limit=50`, {
       signal,

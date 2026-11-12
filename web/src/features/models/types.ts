@@ -114,3 +114,91 @@ export type Prediction = {
   durationMs: number;
   response: unknown;
 };
+export type ServingRequest = Omit<ServingSpec, 'model'> & {
+  name: string;
+  model?: Pick<
+    NonNullable<ServingSpec['model']>,
+    'artifactId' | 'runtime' | 'storageUri' | 'modelFormat' | 'modelFormatVersion'
+  >;
+};
+export type ServingRuntime = {
+  name: string;
+  scope: 'NAMESPACE' | 'CLUSTER';
+  disabled: boolean;
+  multiModel: boolean;
+  multiNode: boolean;
+  protocols: string[];
+  formats: { name: string; version?: string; autoSelect: boolean }[];
+};
+export type ServingRuntimeList = {
+  namespace: string;
+  items: ServingRuntime[];
+  observedAt: string;
+};
+export type ServingPreflight = {
+  ready: boolean;
+  checks: { code: string; passed: boolean; message: string }[];
+  runtimes: ServingRuntime[];
+  storageAccess: string;
+  inferenceValidated: boolean;
+  observedAt: string;
+};
+export type ServingContainer = {
+  name: string;
+  init: boolean;
+  ready: boolean;
+  state: string;
+  reason?: string;
+  restarts: number;
+  exitCode?: number;
+};
+export type ServingPod = {
+  name: string;
+  uid: string;
+  phase: string;
+  ready: boolean;
+  reason?: string;
+  containers: ServingContainer[];
+};
+export type ServingDiagnostics = {
+  serviceId: number;
+  instanceId: string;
+  revision: number;
+  appliedRevision: number;
+  uid: string;
+  state: string;
+  ready: boolean;
+  reason?: string;
+  pods: ServingPod[];
+  events: {
+    kind: string;
+    name: string;
+    uid: string;
+    type: string;
+    reason: string;
+    message: string;
+    count: number;
+    at: string;
+  }[];
+  truncated: boolean;
+  observedAt: string;
+};
+export type ServingLogQuery = {
+  instanceId: string;
+  revision: number;
+  pod: string;
+  podUID: string;
+  container: string;
+  tailLines: number;
+  limitBytes: number;
+  sinceSeconds: number;
+  previous: boolean;
+};
+export type ServingLogs = {
+  pod: string;
+  podUID: string;
+  container: string;
+  text: string;
+  truncated: boolean;
+  observedAt: string;
+};
