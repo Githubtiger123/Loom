@@ -13,6 +13,8 @@ Pipeline 后端包含 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行
 
 后续将 KFP 服务端收进 Loom、保留 Python SDK／IR 并直接基于 Argo 执行的规划，见 [功能迁移与改造方案](docs/pipeline-native-argo-migration.md)。这是待实施设计，不改变当前 KFP 接入主线，也不表示已完成兼容或可卸载 KFP。
 
+后续改为优先复用官方 `argocompiler`、driver、launcher，并接入 Loom API/数据库的具体方案，见 [官方执行内核集成方案](docs/pipeline-official-engine-integration.md)。此方案尚未实施，不等于现有自研转换器已被替换。
+
 数据库布局见 [Pipeline 精简表结构设计](docs/pipeline-native-argo-schema.md)：复用已有定义、版本、运行与执行尝试，核心新增节点执行和产物 2 张表，缓存、定时任务、实验各 1 张，完整目标共新增 5 张；尚未实施迁移。
 
 第一阶段已补充核心两表的 GORM 模型、`000022_pipeline_native_core.sql`、受空间限定的仓储读取及旧 KFP 引擎隔离。第二阶段补充现有 pipeline-worker 内的可选 Workflow Informer、标准重试队列、内部 UID 绑定确认及已登记节点的状态回填；`pipeline.native_observer_enabled` 默认 false，不自动接管资源。原生提交、节点登记／IR runtime、产物发布及最终归档清理尚未接入，现有提交仍走 KFP。未执行迁移或重启；使用新代码启动前需显式应用迁移，否则 schema 检查将拒绝启动。详见 [分阶段实施记录](docs/pipeline-native-argo-schema.md#13-第二阶段可选原生-workflow-观测源码)。
@@ -85,15 +87,18 @@ Pipeline 后端包含 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行
 
 ## 初始化顺序
 
+若迁移失败并标记 dirty，先核实真实 DDL 状态再恢复，不能直接跳过失败版本。`000023` 注释分号造成的执行器错误及定向恢复步骤见 [迁移失败恢复](docs/migration-recovery.md)。
+
 在 Linux 环境从 `platform` 目录运行。先由部署方创建空业务数据库并提供 `LOOM_DB_DSN`，账号需要建表权限；运行 API 的账号建议另用较低权限。
 
 ```bash
 # 环境变量中的连接串由部署方配置，此处不写真实凭据。
-# 1. 执行版本迁移；不会自动初始化管理员或修改集群。
+# 1. 执行版本迁移；000027 会初始化默认本地管理员，不修改集群。
 go run ./cmd/platform -cmd=migrate
 
-# 2. 外部身份模式：显式初始化第一个管理员，使用已验证 issuer/subject。
-# 本地模式改用 auth.issuer 与本地永久主体，并按认证文档另外执行 set-password。
+# 2. 默认本地模式（auth.issuer=https://loom.local）使用 admin / Loom-Dev-2026!，首次登录改密。
+# 外部身份或其他 issuer 的既有部署：用升级前版本执行下面命令，再升级到 000027。
+# 若默认账号已创建，不应再用 bootstrap 增加另一个管理员。
 go run ./cmd/platform -cmd=bootstrap -issuer="https://sso.example.com" -subject="actual-stable-subject" -username="admin@example.com"
 
 # 3. 配置下方身份参数后启动 API。
@@ -116,7 +121,7 @@ go run ./cmd/platform -cmd=kserve-worker -worker-concurrency=4
 
 执行器阶段新增 `000003_operation_execution.sql`；Notebook 业务阶段另新增 `000004_notebook_business.sql`。已有库也必须由部署方先显式执行新增迁移，再启动新版 API 和后台角色；本次没有执行迁移。启动时只校验已执行迁移的版本、校验和及 dirty 标记，不自动迁移。
 
-本地认证使用 `000005_authentication.sql`（凭据及 session_version）和 `000006_auth_tokens.sql`（Access/Refresh 摘要、轮换/撤销状态及共享限流桶）。须显式迁移后部署，升级不接续旧 Redis 会话，用户需重新登录。首个本地密码通过 `-cmd=set-password -user-id=<实际ID>` 的隐藏终端输入配置，不支持匿名设置密码或将明文放在进程参数中。
+本地认证使用 `000005_authentication.sql`（凭据及 session_version）和 `000006_auth_tokens.sql`（Access/Refresh 摘要、轮换/撤销状态及共享限流桶）。须显式迁移后部署，升级不接续旧 Redis 会话，用户需重新登录。`000027_initial_admin.sql` 在没有历史管理员绑定且账号未冲突时自动创建 `admin / Loom-Dev-2026!`，issuer 为 `https://loom.local`，首次登录必须改密，公开服务前必须完成。已有账号不重置密码；其他账号使用 `-cmd=set-password -user-id=<实际ID>` 的隐藏终端输入配置。
 
 新增迁移包括 `000007_auth_sessions.sql`、`000009_workspace_lifecycle.sql` 至 `000021_model_registry.sql`（编号 000008 未使用）。迁移按实际文件名排序执行，不要求连续。切换内置 KFP/KServe 前须停止对应旧外部适配器并核查未完操作；`000020` 增加 KServe CR 身份、地址、就绪状态和同步租约投影，`000021` 增加 Model/Version/Artifact 及模型权限。本轮未执行任何迁移。
 

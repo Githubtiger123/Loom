@@ -82,7 +82,19 @@ docker compose up -d --force-recreate web
 
 无需删除 MySQL/Redis 数据目录或全部 named volume。
 
-首次创建管理员和本地密码保持显式操作，不放进 API 启动过程：
+### 默认管理员
+
+`migrate` 会自动执行 [000027_initial_admin.sql](../../platform/internal/migration/000027_initial_admin.sql)，创建默认管理员、内置角色、权限字典、角色绑定与 Argon2id 密码凭据，不需要单独导入 SQL 或执行 bootstrap／set-password。Compose 启动时由 migrate 服务执行；已有容器更新源码后，可重新运行：
+
+```bash
+docker compose run --rm migrate
+```
+
+迁移成功后使用 **admin / Loom-Dev-2026!** 登录，首次登录必须修改临时密码。此密码公开且固定，公开服务前必须完成改密。初始化身份固定匹配当前 Compose 的 `auth.issuer=https://loom.local`，不受前端地址 localhost／127.0.0.1 影响；其他 issuer 下不能用此身份登录。
+
+已有任何历史平台管理员绑定、同名用户、相同身份或不兼容的管理员角色时，迁移跳过默认账号初始化，不接管账号、不覆盖既有权限、不重置密码。迁移成功后由版本记录保证只执行一次。账号、凭据、权限绑定和审计在同一事务内写入，失败回滚并保留 dirty 标记；不使用存储过程、不修改旧迁移，也不写入 MySQL `docker-entrypoint-initdb.d`。
+
+现有账号若忘记密码，仍应使用 set-password，不通过重新运行迁移重置。外部身份或其他本地 issuer 的既有部署，应使用升级前版本的 CLI 初始化自己的管理员，再升级并执行 000027；已有管理员时默认账号不会创建。下面为原有 CLI 用法，不需要在默认本地安装中执行：
 
 ```bash
 docker compose run --rm api go run ./cmd/platform -config=configs/config.yaml \

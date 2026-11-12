@@ -67,6 +67,8 @@ Redis 可以关闭；启动或运行中不可用时直查 MySQL，不因 Redis �
 
 ## 4. 初始化与本地用户生命周期
 
+`-cmd=migrate` 中的 `000027_initial_admin.sql` 会自动初始化默认本地管理员 `admin / Loom-Dev-2026!`（issuer 固定为 `https://loom.local`），同时创建内置角色、权限绑定和密码哈希，首次登录强制改密。存在历史管理员绑定、同名账号、相同身份或不兼容管理员角色时跳过，不用于密码恢复。此迁移以独立 DML 事务执行，失败回滚并保留 dirty 标记，旧迁移校验和不变。无需单独导入 SQL，API 启动仍只检查迁移。公开服务前必须修改公开临时密码；其他 issuer 的既有部署应使用升级前版本的 CLI 完成下方 bootstrap 流程，再升级并执行 000027 以避免创建默认身份。详见 [Docker 开发说明](../../install/docker/README.md#默认管理员)。
+
 认证表依次使用 `000005_authentication.sql`（独立 session_version 与密码凭据）、`000006_auth_tokens.sql`（两类 Token 和共享限流桶）、`000007_auth_sessions.sql`（family 元数据及强制改密列）；其他模块的迁移仍按项目版本顺序显式安装。保留旧迁移校验和，不 AutoMigrate。000007 从既有 SQL Token 回填 family 创建/刷新/期限/撤销状态，并把已有本地凭据保守标记为必须改密。迁移前停止旧认证写入者，迁移后不得混跑不维护 family/改密标记的旧版本。更早的 Redis 会话不导入；旧 `__Host-loom-session` 不再认证，登录/成功退出时清除，转发 Notebook 时也会剥离。下面是部署方后续操作说明，本次未执行这些命令。
 
 1. 配置真实 HTTPS 来源、唯一的本地 issuer、随机签名密钥和 MySQL 写主库，Redis 可选。`identity.issuer` 留空或与 auth.issuer 完全一致。

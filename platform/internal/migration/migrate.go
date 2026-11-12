@@ -48,6 +48,12 @@ applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)) ENGINE=InnoDB`).Er
 			return err
 		}
 		checksum := fmt.Sprintf("%x", sha256.Sum256(body))
+		// Validate statement boundaries before recording dirty. Hash the original
+		// embedded file, not the comment-free execution statements.
+		statements, err := splitStatements(string(body))
+		if err != nil {
+			return fmt.Errorf("迁移 %s 无法解析: %w", file.Name(), err)
+		}
 		var existing model.SchemaMigration
 		err = conn.Where("name = ?", file.Name()).First(&existing).Error
 		if err == nil {
@@ -65,19 +71,34 @@ applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)) ENGINE=InnoDB`).Er
 		if err := conn.Create(&model.SchemaMigration{Name: file.Name(), Checksum: checksum, Dirty: true}).Error; err != nil {
 			return err
 		}
-		// 迁移仅使用普通 DDL，不包含存储过程或字符串中的分号。
-		for _, statement := range strings.Split(string(body), ";") {
-			if strings.TrimSpace(statement) == "" {
-				continue
+		execute := func(executor *gorm.DB) error {
+			for index, statement := range statements {
+				if err := executor.Exec(statement).Error; err != nil {
+					return fmt.Errorf("迁移 %s 第 %d/%d 条语句失败（已标记 dirty）: %w", file.Name(), index+1, len(statements), err)
+				}
 			}
-			if err := conn.Exec(statement).Error; err != nil {
-				return fmt.Errorf("迁移 %s 失败（已标记 dirty）: %w", file.Name(), err)
-			}
+			return executor.Model(&model.SchemaMigration{}).Where("name = ?", file.Name()).
+				Updates(map[string]any{"dirty": false, "applied_at": gorm.Expr("UTC_TIMESTAMP(3)")}).Error
 		}
-		if err := conn.Model(&model.SchemaMigration{}).Where("name = ?", file.Name()).
-			Updates(map[string]any{"dirty": false, "applied_at": gorm.Expr("UTC_TIMESTAMP(3)")}).Error; err != nil {
+		if file.Name() == "000027_initial_admin.sql" {
+			// Only this DML-only seed is transactional. Do not wrap MySQL DDL.
+			// Serialize against CLI bootstrap as well as other migration runners.
+			err = applyInitialAdmin(ctx, db, execute)
+		} else {
+			err = execute(conn)
+		}
+		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func applyInitialAdmin(ctx context.Context, db *gorm.DB, execute func(*gorm.DB) error) error {
+	lock, err := inframysql.AcquireLock(ctx, db, "loom.identity.bootstrap", 10)
+	if err != nil {
+		return fmt.Errorf("获取管理员初始化锁失败（已标记 dirty）: %w", err)
+	}
+	defer lock.Close()
+	return lock.DB.WithContext(ctx).Transaction(execute)
 }
