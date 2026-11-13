@@ -21,7 +21,6 @@ type PipelinePodRef struct {
 	Container      string
 	ExecutionID    string // KFP 漏填 pod_name 时，按受管 launcher execution ID 精确匹配。
 	NativeWorkflow *PipelineWorkflowRef
-	NativeSpecHash string
 	NativePodUID   string
 	NativeNodeID   string
 	NativeNodeName string

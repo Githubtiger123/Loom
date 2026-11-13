@@ -1,6 +1,9 @@
 package validator
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // 只校验受支持的容器引用语法，不证明仓库可达、镜像可信或运行兼容。
 // digest 当前仅接受 sha256；不允许 URL scheme、用户凭据或空白。
@@ -12,4 +15,10 @@ func IsNotebookImageReference(value string) bool {
 
 func IsContainerImageReference(value string) bool {
 	return len(value) > 0 && len(value) <= 512 && notebookImageReference.MatchString(value)
+}
+
+// Runtime binaries are release-pinned, never selected by a mutable image tag.
+func IsDigestImageReference(value string) bool {
+	parts := strings.Split(value, "@sha256:")
+	return IsContainerImageReference(value) && len(parts) == 2 && IsSHA256(parts[1])
 }

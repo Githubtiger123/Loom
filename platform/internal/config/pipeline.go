@@ -9,12 +9,15 @@ import (
 	"github.com/githubtiger123/loom/platform/internal/utils/validator"
 )
 
-// Pipeline retains KFP for existing runs. NativeEnabled explicitly enables the
-// bounded Python IR path; observation alone never enables native submission.
+// Pipeline retains the KFP service client for existing runs. Official compiler
+// policy is separate from runtime readiness; a flag never installs adapters.
 type Pipeline struct {
 	Enabled                bool     `yaml:"enabled"`
 	NativeObserverEnabled  bool     `yaml:"native_observer_enabled"`
 	NativeEnabled          bool     `yaml:"native_enabled"`
+	OfficialDriverImage    string   `yaml:"official_driver_image"`
+	OfficialLauncherImage  string   `yaml:"official_launcher_image"`
+	OfficialPipelineRoot   string   `yaml:"official_pipeline_root"`
 	NativeServiceAccount   string   `yaml:"native_service_account"`
 	NativeArtifactEndpoint string   `yaml:"native_artifact_endpoint"`
 	NativeArtifactBucket   string   `yaml:"native_artifact_bucket"`
@@ -42,12 +45,13 @@ type Pipeline struct {
 
 func (p Pipeline) Validate() error {
 	if p.NativeEnabled {
-		u, err := url.Parse("https://" + p.NativeArtifactEndpoint)
 		if !p.NativeObserverEnabled || !validator.IsDNS1123Label(p.NativeServiceAccount) || p.NativeParallelism < 1 || p.NativeParallelism > 16 ||
-			!validator.IsPositiveQuantity(p.NativeCPU) || !validator.IsPositiveQuantity(p.NativeMemory) ||
-			!validator.IsDNS1123Subdomain(p.NativeArtifactBucket) || !validator.IsDNS1123Subdomain(p.NativeArtifactSecret) ||
-			err != nil || u.Host != p.NativeArtifactEndpoint || u.Path != "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return fmt.Errorf("原生 Pipeline 需启用 observer，并配置受管执行 SA、并发/资源及无凭据的 S3 endpoint/bucket/secret")
+			!validator.IsDigestImageReference(p.OfficialDriverImage) || !validator.IsDigestImageReference(p.OfficialLauncherImage) {
+			return fmt.Errorf("官方 Pipeline 需启用 observer、配置执行 SA、并发 1–16，以及固定 sha256 digest 的 driver/launcher 镜像；配置有效不表示 runtime 适配已就绪")
+		}
+		root, err := url.Parse(p.OfficialPipelineRoot)
+		if err != nil || (root.Scheme != "s3" && root.Scheme != "gs" && root.Scheme != "minio") || root.Host == "" || root.User != nil || root.RawQuery != "" || root.Fragment != "" {
+			return fmt.Errorf("pipeline.official_pipeline_root 须为不含凭据的 s3/gs/minio 存储根路径")
 		}
 	}
 	if p.NativeObserverEnabled && (p.SyncConcurrency < 1 || p.SyncConcurrency > 16 || p.SyncQPS < 1 || p.SyncQPS > 100) {

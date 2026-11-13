@@ -1,7 +1,8 @@
-FROM golang:1.26.0-alpine AS dependencies
+FROM golang:1.27.3-alpine AS dependencies
 
 WORKDIR /workspace/platform
 COPY platform/go.mod platform/go.sum ./
+COPY engine/kfp/ /workspace/engine/kfp/
 RUN go mod download
 
 FROM dependencies AS development

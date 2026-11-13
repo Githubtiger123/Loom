@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 
+	kfpengine "github.com/githubtiger123/loom/engine/kfp"
 	"github.com/githubtiger123/loom/platform/internal/apperr"
 	"github.com/githubtiger123/loom/platform/internal/config"
 	"github.com/githubtiger123/loom/platform/internal/infra/kfp"
@@ -30,6 +31,7 @@ type Service struct {
 	NotebookImages            *config.NotebookImageCatalog
 	PipelineClient            *kfp.Client
 	NativePipelineClient      *k8s.Client
+	OfficialPipelineBackend   OfficialPipelineBackend
 	PipelineMetadata          PipelineMetadataReader
 	PipelineArtifacts         PipelineArtifactReader
 	ModelPublisher            NativeModelPublisher
@@ -38,10 +40,16 @@ type Service struct {
 	PipelineLogs              PipelineLogReader
 	PipelineTerminal          PipelineTerminalClient
 	PipelineLogArchivesReader PipelineLogArchiveReader
-	NativeLogArchivePolicy    *k8s.NativeLogArchivePolicy
 	KServeClient              *k8s.Client
 	KServeConfig              config.KServe
 	KServeVerifier            KServeSpaceVerifier
+}
+
+// The official backend must enforce existing operation leases and durable UID
+// binding. It is deliberately not installed by merely enabling a config flag.
+type OfficialPipelineBackend interface {
+	kfpengine.Backend
+	Observe(context.Context, string, string) error
 }
 
 func New(db *gorm.DB, cluster, owner string) *Service {

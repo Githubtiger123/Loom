@@ -19,6 +19,9 @@ func (r *Runner) RunPipeline(ctx context.Context) error {
 	}
 	native := r.Service.PipelineConfig.NativeObserverEnabled
 	kfp := r.Service.PipelineClient != nil
+	if (native || r.Service.PipelineConfig.NativeEnabled) && r.Service.OfficialPipelineBackend == nil {
+		return fmt.Errorf("官方 Pipeline runtime 适配尚未装配，请关闭 native_enabled/native_observer_enabled；不会回退到已移除的自研执行器")
+	}
 	executor := kfp || r.Service.PipelineConfig.NativeEnabled
 	if !native && !executor {
 		return fmt.Errorf("pipeline-worker 需要启用 KFP 或原生 Workflow 观测")

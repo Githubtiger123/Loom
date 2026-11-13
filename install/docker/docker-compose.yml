@@ -22,6 +22,7 @@ x-platform-service: &platform-service
   environment: *platform-environment
   volumes:
   - ../../platform:/workspace/platform
+  - ../../engine/kfp:/workspace/engine/kfp:ro
   - go-mod-cache:/go/pkg/mod
   - go-build-cache:/root/.cache/go-build
   - type: bind

@@ -2,6 +2,8 @@
 
 日期：2026-11-12。状态：改造设计，尚未实施、编译或联调；本文不表示官方内核已接入。
 
+2026-11-13 补充决策：使用固定版本官方源码加可追踪适配补丁，自建 driver/launcher 镜像；不要求官方镜像零修改，也不另写一套执行器。具体构建和接线方式见第 3.1、3.2 节。
+
 本文是后续替换自研转换器的目标方案，不改变现有运行默认引擎。优先复用官方编译和执行语义，不再扩展另一套 IR lowering、表达式翻译或 Python launcher。历史设计文档仍用于解释历史协议。
 
 ## 1. 决策与目标
@@ -72,6 +74,42 @@ platform/internal/
 优先保持官方包的内部目录关系，避免为了“文件少”把逻辑打散重写。Apache-2.0 许可及原有声明保留；未改文件与本地补丁分开登记。独立 module 的可构建性和依赖冲突是第一阶段必须验证的门槛，不在方案阶段预先保证。
 
 新增 driver、launcher 两个配套镜像构建产物；镜像使用不可变 digest。编译包 revision、补丁集版本、两镜像 digest、官方 proto/SDK 兼容范围组成一个 engine release。不要追随 `latest`，不要只升级其中一个镜像。
+
+### 3.1 官方包、官方镜像与本地补丁的关系
+
+官方已经提供 Go 源码包以及预构建 driver/launcher 镜像，但预构建程序默认创建官方客户端，连接 MLMD、KFP 缓存等服务。仅修改服务地址不能把官方协议自动换成 Loom Runtime API；在业务后端实现一个 Go 接口，也不会自动改变另一个 Pod 中已编译好的程序。
+
+本方案采用的具体方式是：
+
+1. 从锁定 revision 的官方源码取得编译器及执行时，保留原有许可证、目录关系与语义主体。
+2. 在 driver/launcher 的程序入口注入 `LoomClientManager` 或对应 metadata/cache 客户端，补齐 driver 的接口化和必要类型构造入口。
+3. 通过显式配置传递内部 API 地址、TLS 信任、工作负载认证及受管存储配置，移除目标路径中对官方默认客户端的隐式初始化；不把实际密钥烘焙进镜像。
+4. 基于这些源码重新编译 driver、launcher，构建 `loom-kfp-driver`、`loom-kfp-launcher` 配套镜像，而不是进入运行中的官方容器临时修改文件。
+5. 发布并记录镜像 digest，由官方编译器的 `DriverImage`、`LauncherImage` 选项引用这些镜像。
+
+接线示意如下；镜像地址是占位符，不是当前已有构建产物：
+
+```go
+options := &argocompiler.Options{
+    DriverImage:   "registry.example.com/loom/loom-kfp-driver@sha256:<digest>",
+    LauncherImage: "registry.example.com/loom/loom-kfp-launcher@sha256:<digest>",
+}
+workflow, err := argocompiler.Compile(job, kubernetesSpec, options)
+```
+
+launcher 镜像与用户组件镜像不是同一个东西。按官方模板约定，初始化容器将 launcher 二进制复制到共享卷，组件主容器运行该二进制，再由它启动用户命令。自建 launcher 镜像必须保持编译器约定的二进制路径、复制命令、参数及卷挂载契约；它通常不是额外的 sidecar，也不是为 launcher 单独创建一个用户计算 Pod。用户组件镜像仍由 Pipeline 定义并受平台策略限制，不要求每个用户镜像都预装一份自研 launcher。
+
+如果选择官方镜像完全不改，则需要保留官方配套服务，或在服务端实现其所需的兼容协议。那是另一条取舍，并非本方案的默认路线；不能把这部分兼容成本描述为只改配置。
+
+### 3.2 补丁边界、镜像发布与后续扩展
+
+- **保留官方主体**：IR 到 Workflow 的语义生成、driver 的输入/条件/迭代解析、launcher 的组件执行和产物处理。不重写为 Loom 的另一套规则。
+- **允许且需登记的补丁**：显式配置注入、metadata/cache 依赖接口化、必要构造/编码方法、Runtime API 客户端、机器认证和受限存储接线。补丁量需通过依赖审查确认，不保证只有几行修改。
+- **发布绑定**：后续为两镜像增加独立构建目标和现有镜像发布工作流入口；同一 engine release 绑定上游 revision、补丁版本、编译包与两镜像 digest。构建发布和运行验收是不同步骤，推送成功不代表执行语义已验证。
+- **升级维护**：保存未修改的上游基线与补丁清单，逐项审查上游变更，再发布新 engine release。正在运行的 attempt 继续使用冻结版本，不因 tag 或配置改变而换执行器。
+- **Trainer/Volcano 扩展**：优先实现为普通流水线组件，由 launcher 启动提交/等待组件，再经受限后端 API 创建和管理训练 CR。训练 Pod 仍由相应控制器/调度器管理，不把训练业务持续塞进 launcher；组件要处理幂等提交、失败传播、停止联动和产物登记。
+
+本节只确立后续源码适配、镜像构建及发布方案；本次未创建 Dockerfile/CI 任务、未编译镜像、未发布仓库或修改集群。
 
 ## 4. 对业务层暴露的接口
 
@@ -241,3 +279,26 @@ P0 应先锁定一个官方 SDK/proto/compiler/runtime 组合，不能先承诺�
 6. 一次性承诺支持全部官方功能：编译器复用并不自动补齐存储、插件、可视化、鉴权和运维。
 
 **结论：新主线以官方编译器和执行语义为核心；Loom 只维护业务控制面、数据存取适配和安全策略。复用对象必须是“编译器 + 执行时”这一组，不只是一个函数壳。**
+
+## 14. 2026-11-13 主要框架重构源码状态
+
+本节覆盖上文尚未实施、保留旧运行恢复实现等原先计划。用户本次明确选择删除旧自研执行实现、先重建主要框架，不是完成全量功能迁移。
+
+### 已改的源码
+
+- 新增独立 `engine/kfp` Go 模块，固定上游源码 revision `555bfa60a70da88c594960bdacfd78fa7c061043`，显式引用 API/kubernetes_platform 嵌套模块；不依赖工作区外的绝对路径 replace。
+- 编译入口真实调用官方 `argocompiler.Compile`；保留完整官方模板，不移除 driver、不自写 Python 包装器。平台仅增加受管身份、暂停状态、SA/并发、镜像 digest、路径和资源规模限制。Kubernetes platform 扩展先拒绝，策略/准入仍待完整适配。
+- launcher 入口真实调用官方 `NewLauncherV2/Execute` 并注入官方 ClientManagerInterface；尚无生产 metadata/cache 客户端，也未提供 launcher CLI/镜像。
+- Pipeline 兼容性接口改走官方 schema/编译；配置缺失时只报告 schema 检查。即使编译成功，`runnable` 仍固定 false，不将能力清单当成运行验收结果。
+- 删除 `infra/pipelineir`、旧 `internal/thirdparty/kfp` 摘录、自研 Python runtime、原生模板构造及执行 service；保留通用集群读取/Informer/日志身份核验和业务 API/模型/仓储/版本化迁移。
+- 现有 KFP 服务端适配继续保留。旧原生 SQL 证据只读，不用新编译器重解释旧节点；原生日志归档读取需要对应旧版本，不猜测对象路径。
+- 新原生提交在受理前返回 unavailable；原生停止/清理同样拒绝。没有装配官方 backend 时，原生 worker/observer 启动明确报错。不能只开开关就绕过未实现适配。
+- 工具链声明、Docker 与 Compose 的模块路径随官方依赖调整；尚未交付 driver/launcher 镜像流水线。
+
+### 尚未完成
+
+上游 driver 仍有具体 metadata 客户端依赖；接口抽取、运行级 Runtime API/GORM、Pod 认证、输出/缓存、受控提交及恢复、节点投影、终态收尾、运行时 CLI/镜像、前端对新能力状态的适配均未完成。原生功能因此存在明确中断，不能用新二进制管理仍在运行的旧 v3 attempt。升级前应先保留旧部署/使用对应版本处理存量，不要直接替换生产执行器。
+
+依赖元数据核验尚未完成：国内 Go 代理返回 sumdb 404，改用官方代理后连接超时；新增依赖的 go.sum 尚未补齐。未关闭 checksum 校验、未伪造校验和。未编译、测试、启动、迁移、部署或调用 Kubernetes。本次只交付重构框架，不表示 P2 最小执行闭环通过。
+
+下一步以 P2 为主：先完成无缓存、两组件传参及结果登记，再沿官方协议接产物、动态控制流和缓存。不要回到另一套自研 IR 解释器。

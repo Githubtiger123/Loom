@@ -1,6 +1,6 @@
 # Loom 后端
 
-原生 Pipeline 当前源码范围见 [v3 扩展说明](docs/pipeline-native-v3.md)：循环、条件、缓存、自动重试、目录产物、在线停止和自动日志归档。新增缓存迁移 000024；旧协议保留。下文各阶段为历史记录，当前状态以 v3 文档为准。仅完成源码级集成，未编译、测试、部署或验收。
+原生 Pipeline 正在重构为 [官方 KFP 执行内核](docs/pipeline-official-engine-integration.md#14-2026-11-13-主要框架重构源码状态)。旧自研 IR 转换器、Python runtime、模板与执行处理代码已删除；新 `engine/kfp` 直接调用官方 `argocompiler.Compile`，并预留官方 launcher 的客户端注入入口。**这不是可运行版本**：driver、Runtime API/GORM、工作负载鉴权、节点投影与运行时镜像尚未接通；依赖锁定核验也未完成。原生提交/停止/清理明确拒绝，原生 observer/worker 不会回退旧实现。旧原生数据只保留已有 SQL 证据读取，恢复执行或归档读取需使用对应旧版本。现有 KFP 服务端适配、业务 CRUD、数据库和集群资源未删除。下文 v1/v3 与各阶段仅为历史记录，不能作为本版本能力声明。
 
 新增可选原生 Python Pipeline 第一版源码，最新范围、配置和未验收边界见 [说明](docs/pipeline-native-python-v1.md)；官方类型、Visitor 和输出规则复用情况见 [官方复用改造](docs/pipeline-native-official-reuse.md)。默认不启用，不替换旧 KFP 运行。
 
@@ -13,7 +13,7 @@ Pipeline 后端包含 [DAG 与节点详情接口](docs/pipeline-dag.md)：运行
 
 后续将 KFP 服务端收进 Loom、保留 Python SDK／IR 并直接基于 Argo 执行的规划，见 [功能迁移与改造方案](docs/pipeline-native-argo-migration.md)。这是待实施设计，不改变当前 KFP 接入主线，也不表示已完成兼容或可卸载 KFP。
 
-后续改为优先复用官方 `argocompiler`、driver、launcher，并接入 Loom API/数据库的具体方案，见 [官方执行内核集成方案](docs/pipeline-official-engine-integration.md)。此方案尚未实施，不等于现有自研转换器已被替换。
+优先复用官方 `argocompiler`、driver、launcher，并接入 Loom API/数据库的具体方案，见 [官方执行内核集成方案](docs/pipeline-official-engine-integration.md)。已开始主要框架替换，未完成最小执行闭环；进度以文末实施记录为准。
 
 数据库布局见 [Pipeline 精简表结构设计](docs/pipeline-native-argo-schema.md)：复用已有定义、版本、运行与执行尝试，核心新增节点执行和产物 2 张表，缓存、定时任务、实验各 1 张，完整目标共新增 5 张；尚未实施迁移。
 

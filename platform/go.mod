@@ -1,8 +1,11 @@
 module github.com/githubtiger123/loom/platform
 
-go 1.26.0
+go 1.27.0
+
+toolchain go1.27.3
 
 require (
+	github.com/githubtiger123/loom/engine/kfp v0.0.0
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/cel-go v0.30.0
@@ -24,6 +27,14 @@ require (
 	k8s.io/apimachinery v0.37.2
 	k8s.io/client-go v0.37.2
 	k8s.io/streaming v0.37.2
+)
+
+replace github.com/githubtiger123/loom/engine/kfp => ../engine/kfp
+
+// Pin upstream nested modules; dependency-local replace directives are not inherited.
+require (
+	github.com/kubeflow/pipelines/api v0.0.0-20261027233236-555bfa60a70d // indirect
+	github.com/kubeflow/pipelines/kubernetes_platform v0.0.0-20261027233236-555bfa60a70d // indirect
 )
 
 require (

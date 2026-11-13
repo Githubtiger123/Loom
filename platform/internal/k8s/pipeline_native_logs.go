@@ -22,7 +22,7 @@ func (c *Client) resolveNativePipelinePod(ctx context.Context, ref PipelinePodRe
 	if err != nil {
 		return podlog.Target{}, err
 	}
-	if ValidateNativePipelineObservedSpec(workflow, *w, ref.NativeSpecHash) != nil {
+	if !PipelineWorkflowMatches(workflow, *w) {
 		return bad()
 	}
 	pod, err := c.kube.CoreV1().Pods(ref.Namespace).Get(ctx, ref.Pod, metav1.GetOptions{})

@@ -296,7 +296,8 @@ func (s *Service) PipelineRunAttempts(ctx context.Context, actor, groupID, id ui
 	for i := range items {
 		if items[i].Engine == model.PipelineEngineNativeArgo {
 			items[i].Snapshot = json.RawMessage(`{"schemaVersion":1,"redacted":true,"engine":"NATIVE_ARGO"}`)
-			items[i].RuntimeSummary = redactNativeStartSummary(&items[i])
+			// Do not decode old engine checkpoints with a different runtime.
+			items[i].RuntimeSummary = json.RawMessage(`{"schemaVersion":1,"redacted":true,"reason":"ENGINE_SPECIFIC_READER_REQUIRED"}`)
 		}
 	}
 	return items, err

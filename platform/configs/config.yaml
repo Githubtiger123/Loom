@@ -94,12 +94,17 @@ images:
 pipeline:
   # 复用官方 KFP v2 后端，执行角色使用 -cmd pipeline-worker；不改 Notebook worker。
   enabled: false
-  # 仅启用受管原生 Workflow 的 Informer 观测，不启用原生提交或 IR 编译。
+  # 官方 runtime backend 尚未装配，先保持关闭；启用后 worker 会明确拒绝启动。
   native_observer_enabled: false
-  # Native v3：显式 engine=NATIVE_ARGO；需迁移 22–24、Argo 和日志归档配置。
+  # 原生执行已改为官方内核框架，尚不能提交；不会回退到已删除的自研引擎。
   native_enabled: false
+  # 待发布接入 Loom Runtime API 的运行时后，配置实际镜像@sha256:digest；不能用原版二进制冒充已接入。
+  official_driver_image: ""
+  official_launcher_image: ""
+  official_pipeline_root: "s3://mlpipeline/loom-official"
   native_service_account: loom-pipeline-task
   native_parallelism: 4
+  # 下列旧 native_* 资源/存储字段只为读取旧配置保留，不用于官方引擎就绪判定。
   native_cpu: "1"
   native_memory: 1Gi
   native_artifact_endpoint: minio-service.kubeflow.svc.cluster.local:9000
