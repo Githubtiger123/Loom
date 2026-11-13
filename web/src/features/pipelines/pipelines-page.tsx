@@ -83,38 +83,65 @@ export function PipelinesPage() {
 
 function DefinitionsTable({ groupId, scope }: { groupId: string; scope: string }) {
   const [after, setAfter] = useState(0);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
   const query = useQuery({
-    queryKey: pipelineKeys.query(groupId, 'list', scope, after),
-    queryFn: ({ signal }) => pipelineApi.list(groupId, scope, after, signal),
+    queryKey: pipelineKeys.query(groupId, 'list', scope, after, includeDeleted),
+    queryFn: ({ signal }) => pipelineApi.list(groupId, scope, after, signal, includeDeleted),
     retry: false,
   });
   return (
-    <QueryState query={query}>
-      {(page) => (
-        <div className="stack">
-          <Table
-            rows={page.items ?? []}
-            rowKey={(row) => String(row.id)}
-            caption="流水线定义"
-            empty={<NoData title="还没有流水线" description="先新建流水线，再导入编译好的版本。" />}
-            columns={[
-              {
-                key: 'name',
-                header: '流水线',
-                render: (row) => (
-                  <Link className="text-link" to={`/workspaces/${groupId}/pipelines/${row.id}`}>
-                    {row.displayName || row.name}
-                  </Link>
-                ),
-                supporting: (row) => row.description,
-              },
-              { key: 'revision', header: '修订', render: (row) => `r${row.revision}` },
-              { key: 'createdAt', header: '创建时间', render: (row) => formatTime(row.createdAt) },
-            ]}
-          />
-          <PageControls after={after} next={page.nextAfter} onChange={setAfter} />
-        </div>
-      )}
-    </QueryState>
+    <div className="stack">
+      <Select
+        label="定义范围"
+        value={includeDeleted ? 'history' : 'current'}
+        onChange={(value) => {
+          setAfter(0);
+          setIncludeDeleted(value === 'history');
+        }}
+        options={[
+          { value: 'current', label: '未归档的定义' },
+          { value: 'history', label: '包含已归档的历史定义' },
+        ]}
+      />
+      <QueryState query={query}>
+        {(page) => (
+          <div className="stack">
+            <Table
+              rows={page.items ?? []}
+              rowKey={(row) => String(row.id)}
+              caption="流水线定义"
+              empty={
+                <NoData title="还没有流水线" description="先新建流水线，再导入编译好的版本。" />
+              }
+              columns={[
+                {
+                  key: 'name',
+                  header: '流水线',
+                  render: (row) => (
+                    <Link className="text-link" to={`/workspaces/${groupId}/pipelines/${row.id}`}>
+                      {row.displayName || row.name}
+                    </Link>
+                  ),
+                  supporting: (row) => row.description,
+                },
+                { key: 'revision', header: '修订', render: (row) => `r${row.revision}` },
+                {
+                  key: 'deletedAt',
+                  header: '归档',
+                  render: (row) =>
+                    row.deletedAt ? `已归档 · ${formatTime(row.deletedAt)}` : '未归档',
+                },
+                {
+                  key: 'createdAt',
+                  header: '创建时间',
+                  render: (row) => formatTime(row.createdAt),
+                },
+              ]}
+            />
+            <PageControls after={after} next={page.nextAfter} onChange={setAfter} />
+          </div>
+        )}
+      </QueryState>
+    </div>
   );
 }

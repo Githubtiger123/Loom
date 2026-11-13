@@ -13,11 +13,14 @@ import { DagPanel } from './components/dag-panel';
 import { VisualizationsPanel } from './components/visualizations-panel';
 import { LogsPanel } from './components/logs-panel';
 import { StopRunDialog } from './components/stop-run-dialog';
+import { RunActions } from './components/run-actions';
+import { RuntimePanel } from './components/runtime-panel';
 import './pipelines.css';
 
 export function PipelineRunDetailPage() {
   const { groupId = '', runId = '' } = useParams();
   const access = usePipelineAccess(groupId);
+  const { operation, setOperation } = useOperationNavigation();
   const query = useQuery({
     queryKey: pipelineKeys.query(groupId, 'run', runId),
     queryFn: ({ signal }) => pipelineApi.run(groupId, runId, signal),
@@ -37,31 +40,38 @@ export function PipelineRunDetailPage() {
     );
   if (!access.can('pipeline.read')) return <ErrorState error={noAccess()} />;
   return (
-    <QueryState query={query}>
-      {(run) =>
-        access.allows('pipeline.read', run) ? (
-          <RunContent
-            key={`${groupId}/${run.id}/${run.instanceId}`}
-            groupId={groupId}
-            run={run}
-            canLogs={access.allows('pipeline.logs', run)}
-            canStopRun={access.allows('pipeline.stop', run)}
-            onRefresh={() => {
-              void query.refetch();
-            }}
-            refreshing={query.isFetching}
-          />
-        ) : (
-          <ErrorState error={noAccess()} />
-        )
-      }
-    </QueryState>
+    <>
+      <QueryState query={query}>
+        {(run) =>
+          access.allows('pipeline.read', run) ? (
+            <RunContent
+              key={`${groupId}/${run.id}/${run.instanceId}`}
+              groupId={groupId}
+              run={run}
+              onOperation={setOperation}
+              canLogs={access.allows('pipeline.logs', run)}
+              canStopRun={access.allows('pipeline.stop', run)}
+              onRefresh={() => {
+                void query.refetch();
+              }}
+              refreshing={query.isFetching}
+            />
+          ) : (
+            <ErrorState error={noAccess()} />
+          )
+        }
+      </QueryState>
+      {operation && (
+        <OperationDialog id={operation} groupId={groupId} onClose={() => setOperation(undefined)} />
+      )}
+    </>
   );
 }
 
 function RunContent({
   groupId,
   run,
+  onOperation,
   canLogs,
   canStopRun,
   onRefresh,
@@ -69,6 +79,7 @@ function RunContent({
 }: {
   groupId: string;
   run: Run;
+  onOperation: (id: string) => void;
   canLogs: boolean;
   canStopRun: boolean;
   onRefresh: () => void;
@@ -76,11 +87,11 @@ function RunContent({
 }) {
   const [search, setSearch] = useSearchParams();
   const [stopping, setStopping] = useState(false);
-  const { operation, setOperation } = useOperationNavigation();
   const tabs = [
     { value: 'overview', label: '概览' },
     { value: 'dag', label: 'DAG 与输入输出' },
     { value: 'artifacts', label: '指标与产物' },
+    { value: 'diagnostics', label: '运行诊断' },
     ...(canLogs ? [{ value: 'logs', label: '运行日志' }] : []),
   ];
   const requested = search.get('tab') || 'overview';
@@ -105,6 +116,7 @@ function RunContent({
                 停止运行
               </Button>
             )}
+            <RunActions groupId={groupId} run={run} onAccepted={onOperation} />
           </>
         }
       />
@@ -114,7 +126,7 @@ function RunContent({
           观测：{run.observedState} · {formatTime(run.observedAt)}
         </span>
         {run.operationId && (
-          <Button hierarchy="link" size="sm" onClick={() => setOperation(run.operationId!)}>
+          <Button hierarchy="link" size="sm" onClick={() => onOperation(run.operationId!)}>
             查看操作进度
           </Button>
         )}
@@ -122,6 +134,11 @@ function RunContent({
       {run.statusReason && (
         <Alert color="warning" title="运行状态说明">
           {run.statusReason}
+        </Alert>
+      )}
+      {!!run.pendingSpec && (
+        <Alert color="warning" title="正在准备新配置">
+          后台需要先停止并清理旧执行资源，完成后才能手动启动。请查看操作进度，不能将已受理当成清理完成。
         </Alert>
       )}
       <Tabs
@@ -133,6 +150,9 @@ function RunContent({
       {tab === 'overview' && <RunOverview run={run} groupId={groupId} />}
       {tab === 'dag' && <DagPanel key={panelKey} groupId={groupId} run={run} />}
       {tab === 'artifacts' && <VisualizationsPanel key={panelKey} groupId={groupId} run={run} />}
+      {tab === 'diagnostics' && (
+        <RuntimePanel key={panelKey} groupId={groupId} run={run} onOperation={onOperation} />
+      )}
       {tab === 'logs' && canLogs && <LogsPanel key={panelKey} groupId={groupId} run={run} />}
       {stopping && canStopRun && (
         <StopRunDialog
@@ -141,12 +161,9 @@ function RunContent({
           onClose={() => setStopping(false)}
           onAccepted={(id) => {
             setStopping(false);
-            setOperation(id);
+            onOperation(id);
           }}
         />
-      )}
-      {operation && (
-        <OperationDialog id={operation} groupId={groupId} onClose={() => setOperation(undefined)} />
       )}
     </div>
   );

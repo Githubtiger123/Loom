@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Table } from '@atomus';
+import { Button, Select, Table } from '@atomus';
 import { NoData, StatusBadge } from '@/components/feedback';
 import { pipelineApi, pipelineKeys, pollPipeline } from '../api';
 import { formatTime } from '../policy';
@@ -17,50 +17,73 @@ export function RunsTable({
   scope: string;
 }) {
   const [after, setAfter] = useState(0);
+  const [includeDeleted, setIncludeDeleted] = useState(false);
   const query = useQuery({
-    queryKey: pipelineKeys.query(groupId, 'runs', pipelineId, scope, after),
-    queryFn: ({ signal }) => pipelineApi.runs(groupId, pipelineId, scope, after, signal),
+    queryKey: pipelineKeys.query(groupId, 'runs', pipelineId, scope, after, includeDeleted),
+    queryFn: ({ signal }) =>
+      pipelineApi.runs(groupId, pipelineId, scope, after, signal, includeDeleted),
     refetchInterval: pollPipeline,
     retry: false,
   });
   return (
-    <QueryState query={query}>
-      {(page) => (
-        <div className="stack">
-          <Table
-            rows={page.items ?? []}
-            rowKey={(row) => String(row.id)}
-            caption="流水线运行记录"
-            empty={<NoData title="还没有运行" description="选择流水线版本并提交一次运行。" />}
-            columns={[
-              {
-                key: 'name',
-                header: '运行',
-                render: (row) => (
-                  <Link className="text-link" to={`/workspaces/${groupId}/pipeline-runs/${row.id}`}>
-                    {row.name}
-                  </Link>
-                ),
-              },
-              { key: 'engine', header: '引擎' },
-              {
-                key: 'versionId',
-                header: '版本',
-                render: (row) =>
-                  `#${row.versionId} · r${row.versionRevision ?? row.spec.versionRevision ?? '—'}`,
-              },
-              {
-                key: 'status',
-                header: '状态',
-                render: (row) => <StatusBadge status={row.status} />,
-              },
-              { key: 'createdAt', header: '创建时间', render: (row) => formatTime(row.createdAt) },
-            ]}
-          />
-          <PageControls after={after} next={page.nextAfter} onChange={setAfter} />
-        </div>
-      )}
-    </QueryState>
+    <div className="stack">
+      <Select
+        label="运行记录范围"
+        value={includeDeleted ? 'history' : 'current'}
+        onChange={(value) => {
+          setAfter(0);
+          setIncludeDeleted(value === 'history');
+        }}
+        options={[
+          { value: 'current', label: '未删除的运行' },
+          { value: 'history', label: '包含已删除的历史运行' },
+        ]}
+      />
+      <QueryState query={query}>
+        {(page) => (
+          <div className="stack">
+            <Table
+              rows={page.items ?? []}
+              rowKey={(row) => String(row.id)}
+              caption="流水线运行记录"
+              empty={<NoData title="还没有运行" description="选择流水线版本并提交一次运行。" />}
+              columns={[
+                {
+                  key: 'name',
+                  header: '运行',
+                  render: (row) => (
+                    <Link
+                      className="text-link"
+                      to={`/workspaces/${groupId}/pipeline-runs/${row.id}`}
+                    >
+                      {row.name}
+                    </Link>
+                  ),
+                },
+                { key: 'engine', header: '引擎' },
+                {
+                  key: 'versionId',
+                  header: '版本',
+                  render: (row) =>
+                    `#${row.versionId} · r${row.versionRevision ?? row.spec.versionRevision ?? '—'}`,
+                },
+                {
+                  key: 'status',
+                  header: '状态',
+                  render: (row) => <StatusBadge status={row.status} />,
+                },
+                {
+                  key: 'createdAt',
+                  header: '创建时间',
+                  render: (row) => formatTime(row.createdAt),
+                },
+              ]}
+            />
+            <PageControls after={after} next={page.nextAfter} onChange={setAfter} />
+          </div>
+        )}
+      </QueryState>
+    </div>
   );
 }
 

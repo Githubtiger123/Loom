@@ -385,3 +385,13 @@ importer、artifact iterator、Kubernetes platform/PVC/workspace、Trainer/Volca
 6. 审查剩余上游错误日志是否泄露参数，验证 TLS/SAN/CA、TokenReview 和最小 RBAC、NetworkPolicy、存储读写/保留策略及 admission 行为。
 
 本轮已完成两个模块依赖 tidy，保持 checksum 校验；其余只做源码对照、gofmt/前端格式化、来源哈希和差异检查。按仓库约定未新增或运行测试，未编译、类型检查、启动项目、执行迁移、构建镜像或操作集群。因此不能把源码清单表述为“全部已经可用”，P2/P3/P4 的运行验收仍待执行。
+
+### 16.5 前端管理与执行诊断补齐（源码）
+
+- 版本详情新增 IR 编辑页，PUT 携带固定的版本 `revision` 与父定义 `parentRevision`；保存生成新修订，不改变既有运行快照。409 保留输入，不改用最新修订覆盖。
+- 定义归档、运行删除清理、启动均显式确认。运行编辑复用版本／参数表单，保存后先停止并清理旧执行，再应用新快照；只有 `executionCleaned`、无 `pendingSpec` 且业务／期望／观测均为 STOPPED 时显示启动入口。启动仍用保存快照，不隐式升级到最新版本。全部复用已有业务接口和权限，未新增迁移。
+- 列表可显式 `includeDeleted=true` 查询历史；仍受 group、mine/all 与逐对象授权限制。归档不是永久删除，已有存储产物不被前端操作直接删除。
+- 现有 runtime 只读响应补充 `instanceId/revision` 和可选 `diagnostics`：引擎 release、Workflow 名称／UID、计划摘要、阶段／原因及观测／同步／归档时间；原生数据来自当前 attempt，返回前重新核验权限及运行身份。不给浏览器冻结 manifest、策略、存储会话或凭据。
+- 诊断页签按可见状态加载，按空间／运行／实例／修订隔离缓存，失败不展示旧 runtime 数据。该接口不提供实时 Kubernetes Event；镜像拉取、调度等根因仍需集群诊断，UI 不猜测。关联操作单、DAG 和日志仍是提交失败和组件输出错误的入口。
+
+本次只做源码阅读、修改、格式化和差异检查，未构建、类型检查、运行测试或做浏览器／集群联调。

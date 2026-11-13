@@ -41,6 +41,8 @@ export type Run = Identity & {
   cluster: string;
   executionCleaned: boolean;
   operationId: string | null;
+  pendingSpec?: unknown;
+  externalId?: string | null;
   spec: VersionSpec & { values: ParameterValue[]; versionRevision?: number };
 };
 export type Compatibility = {
@@ -56,6 +58,36 @@ export type Compatibility = {
   issuesTruncated: boolean;
   taskCount: number;
   dependencyCount: number;
+};
+export type Runtime = {
+  instanceId: string;
+  revision: number;
+  externalId: string;
+  state: string;
+  createdAt: string;
+  finishedAt: string;
+  diagnostics?: {
+    engineRelease?: string;
+    workflowName?: string;
+    workflowUID?: string;
+    planDigest?: string;
+    phase?: string;
+    reason?: string;
+    syncReason?: string;
+    observedAt?: string;
+    syncAttemptedAt?: string;
+    archivedAt?: string;
+  };
+  tasks: {
+    taskId: string;
+    name: string;
+    podName: string;
+    executionId: string;
+    state: string;
+    parentTaskId: string;
+    startTime: string;
+    endTime: string;
+  }[];
 };
 export type Definition = {
   nodeId: string;

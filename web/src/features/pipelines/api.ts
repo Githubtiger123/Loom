@@ -11,6 +11,7 @@ import type {
   NodeDetail,
   Pipeline,
   Run,
+  Runtime,
   Version,
   Visualizations,
 } from './types';
@@ -35,8 +36,11 @@ export const pollPipeline = (query: { state: { error: unknown } }) =>
   query.state.error ? (false as const) : 5000;
 export const noAccess = () => new ApiError(403, 'FORBIDDEN', '需要流水线权限及对象访问权限');
 export const pipelineApi = {
-  list: (g: string, scope: string, after: number, signal: AbortSignal) =>
-    api<Page<Pipeline>>(`${pipelinePath(g)}?scope=${scope}&limit=50&after=${after}`, { signal }),
+  list: (g: string, scope: string, after: number, signal: AbortSignal, includeDeleted = false) =>
+    api<Page<Pipeline>>(
+      `${pipelinePath(g)}?scope=${scope}&limit=50&after=${after}&includeDeleted=${includeDeleted}`,
+      { signal },
+    ),
   detail: (g: string, id: string, signal: AbortSignal) =>
     api<Pipeline>(pipelinePath(g, id), { signal }),
   versions: (g: string, id: string, after: number, signal: AbortSignal) =>
@@ -48,14 +52,25 @@ export const pipelineApi = {
       `${pipelinePath(g, id)}/versions/${version.id}/native-compatibility?revision=${version.revision}`,
       { signal },
     ),
-  runs: (g: string, id: string | undefined, scope: string, after: number, signal: AbortSignal) =>
+  runs: (
+    g: string,
+    id: string | undefined,
+    scope: string,
+    after: number,
+    signal: AbortSignal,
+    includeDeleted = false,
+  ) =>
     api<Page<Run>>(
-      `${id ? `${pipelinePath(g, id)}/runs` : `/groups/${g}/pipeline-runs`}?scope=${scope}&limit=50&after=${after}`,
+      `${id ? `${pipelinePath(g, id)}/runs` : `/groups/${g}/pipeline-runs`}?scope=${scope}&limit=50&after=${after}&includeDeleted=${includeDeleted}`,
       { signal },
     ),
   run: (g: string, id: string, signal: AbortSignal) => api<Run>(runPath(g, id), { signal }),
   create: (path: string, body: unknown, key: string) =>
     api<Operation>(path, { method: 'POST', body, key }),
+  command: (path: string, method: 'POST' | 'PUT' | 'DELETE', body: unknown, key: string) =>
+    api<Operation>(path, { method, body, key }),
+  runtime: (g: string, run: Run, signal: AbortSignal) =>
+    api<Runtime>(`${runPath(g, run.id)}/runtime`, { signal }),
   dag: (g: string, run: Run, signal: AbortSignal) =>
     api<DAG>(`${runPath(g, run.id)}/dag`, { signal }),
   node: (g: string, run: Run, node: string, signal: AbortSignal) =>

@@ -1,23 +1,24 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Link, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Input, Select } from '@atomus';
 import type { Group } from '@/lib/types';
 import { ErrorState, Loading, NoData, PageHeading } from '@/components/feedback';
 import { FormTextarea } from '@/components/form-textarea';
-import { pipelineApi, pipelineKeys, pipelinePath, noAccess } from './api';
+import { pipelineApi, pipelineKeys, pipelinePath, runPath, noAccess, pollPipeline } from './api';
 import {
   createPipelineSchema,
   importVersionSchema,
   parameterValues,
   pipelineName,
 } from './form-schema';
-import { usePipelineAccess } from './policy';
-import type { Pipeline, Version } from './types';
+import { canManageRun, usePipelineAccess } from './policy';
+import type { Pipeline, Run, Version } from './types';
 import { CommandForm } from './components/command-form';
 import { QueryState } from './components/query-state';
 import { CompatibilitySummary } from './components/version-summary';
 import { PageControls } from './components/catalog-tables';
+import { IRInput } from './components/ir-input';
 import './pipelines.css';
 
 export function CreatePipelinePage() {
@@ -107,9 +108,7 @@ function ImportForm({ groupId, row }: { groupId: string; row: Pipeline }) {
   const [revision] = useState(row.revision);
   const [name, setName] = useState('');
   const [packageYaml, setPackageYaml] = useState('');
-  const [fileError, setFileError] = useState<unknown>();
-  const [reading, setReading] = useState(false);
-  const readGeneration = useRef(0);
+  const [blocked, setBlocked] = useState(false);
   return (
     <div className="stack spacious pipeline-form">
       <Link className="text-link" to={`/workspaces/${groupId}/pipelines/${row.id}`}>
@@ -126,11 +125,7 @@ function ImportForm({ groupId, row }: { groupId: string; row: Pipeline }) {
           destination={`/workspaces/${groupId}/pipelines/${row.id}`}
           label="导入版本"
           disabled={
-            reading ||
-            fileError !== undefined ||
-            group.status !== 'ACTIVE' ||
-            !!row.deletedAt ||
-            row.revision !== revision
+            blocked || group.status !== 'ACTIVE' || !!row.deletedAt || row.revision !== revision
           }
           payload={() => ({ ...importVersionSchema.parse({ name, packageYaml }), revision })}
         >
@@ -141,52 +136,7 @@ function ImportForm({ groupId, row }: { groupId: string; row: Pipeline }) {
             required
             maxLength={63}
           />
-          <Input
-            label="选择 IR 文件（最多 512 KiB）"
-            type="file"
-            accept=".yaml,.yml,.json"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              const generation = ++readGeneration.current;
-              setFileError(undefined);
-              if (!file) {
-                setReading(false);
-                return;
-              }
-              if (file.size > 512 * 1024) {
-                setReading(false);
-                setFileError(new Error('文件不能超过 512 KiB'));
-                return;
-              }
-              setReading(true);
-              void file
-                .text()
-                .then((text) => {
-                  if (generation === readGeneration.current) setPackageYaml(text);
-                })
-                .catch((error: unknown) => {
-                  if (generation === readGeneration.current) setFileError(error);
-                })
-                .finally(() => {
-                  if (generation === readGeneration.current) setReading(false);
-                });
-            }}
-          />
-          <FormTextarea
-            label="Pipeline IR YAML"
-            rows={20}
-            value={packageYaml}
-            onChange={(event) => {
-              readGeneration.current++;
-              setReading(false);
-              setFileError(undefined);
-              setPackageYaml(event.target.value);
-            }}
-            required
-            spellCheck={false}
-            hint="SDK 编译结果；不是 Python 源码，也不是 Argo Workflow YAML。"
-          />
-          {fileError !== undefined && <ErrorState error={fileError} />}
+          <IRInput value={packageYaml} onChange={setPackageYaml} onBlocked={setBlocked} />
           {row.revision !== revision && (
             <Alert color="warning" title="定义修订已变化">
               输入已保留，请核对后重新打开导入页面。
@@ -224,10 +174,59 @@ export function SubmitPipelineRunPage() {
   );
 }
 
-function RunVersionPicker({ groupId, row }: { groupId: string; row: Pipeline }) {
+export function EditPipelineRunPage() {
+  const { groupId = '', runId = '' } = useParams();
+  const access = usePipelineAccess(groupId);
+  const query = useQuery({
+    queryKey: pipelineKeys.query(groupId, 'run', runId),
+    queryFn: ({ signal }) => pipelineApi.run(groupId, runId, signal),
+    enabled: access.can('pipeline.read'),
+    retry: false,
+    refetchInterval: pollPipeline,
+  });
+  if (access.isPending) return <Loading />;
+  if (access.isError) return <ErrorState error={access.error} />;
+  if (!access.can('pipeline.read')) return <ErrorState error={noAccess()} />;
+  return (
+    <QueryState query={query}>
+      {(run) =>
+        ['pipeline.read', 'pipeline.update', 'pipeline.stop', 'pipeline.delete'].every((code) =>
+          access.allows(code, run),
+        ) ? (
+          <EditRunParent key={`${groupId}/${run.id}`} groupId={groupId} run={run} />
+        ) : (
+          <ErrorState error={noAccess()} />
+        )
+      }
+    </QueryState>
+  );
+}
+
+function EditRunParent({ groupId, run }: { groupId: string; run: Run }) {
+  const access = usePipelineAccess(groupId);
+  const query = useQuery({
+    queryKey: pipelineKeys.query(groupId, 'definition', String(run.pipelineId)),
+    queryFn: ({ signal }) => pipelineApi.detail(groupId, String(run.pipelineId), signal),
+    retry: false,
+  });
+  return (
+    <QueryState query={query}>
+      {(row) =>
+        access.allows('pipeline.read', row) ? (
+          <RunVersionPicker key={`${groupId}/${run.id}`} groupId={groupId} row={row} run={run} />
+        ) : (
+          <ErrorState error={noAccess()} />
+        )
+      }
+    </QueryState>
+  );
+}
+
+function RunVersionPicker({ groupId, row, run }: { groupId: string; row: Pipeline; run?: Run }) {
   const [search, setSearch] = useSearchParams();
   const [after, setAfter] = useState(0);
-  const selected = search.get('version') ?? '';
+  const [initialVersionId] = useState(run ? String(run.versionId) : '');
+  const selected = search.get('version') ?? initialVersionId;
   const versions = useQuery({
     queryKey: pipelineKeys.query(groupId, 'versions', String(row.id), after),
     queryFn: ({ signal }) => pipelineApi.versions(groupId, String(row.id), after, signal),
@@ -241,12 +240,23 @@ function RunVersionPicker({ groupId, row }: { groupId: string; row: Pipeline }) 
   });
   return (
     <div className="stack spacious pipeline-form">
-      <Link className="text-link" to={`/workspaces/${groupId}/pipelines/${row.id}`}>
-        ← 返回流水线
+      <Link
+        className="text-link"
+        to={
+          run
+            ? `/workspaces/${groupId}/pipeline-runs/${run.id}`
+            : `/workspaces/${groupId}/pipelines/${row.id}`
+        }
+      >
+        ← 返回{run ? '运行' : '流水线'}
       </Link>
       <PageHeading
-        title="提交运行"
-        description="选择已保存版本；每次运行固定版本修订与参数快照。"
+        title={run ? '修改运行配置' : '提交运行'}
+        description={
+          run
+            ? '保存将请求停止并清理旧实例，再应用新快照；完成后需在运行详情单独确认启动。不会修改流水线版本。'
+            : '选择已保存版本；每次运行固定版本修订与参数快照。'
+        }
       />
       <QueryState query={versions}>
         {(page) => (
@@ -271,7 +281,13 @@ function RunVersionPicker({ groupId, row }: { groupId: string; row: Pipeline }) 
       {selected ? (
         <QueryState query={version}>
           {(value) => (
-            <RunForm key={`${row.id}/${value.id}`} groupId={groupId} row={row} version={value} />
+            <RunForm
+              key={`${row.id}/${value.id}`}
+              groupId={groupId}
+              row={row}
+              version={value}
+              run={run}
+            />
           )}
         </QueryState>
       ) : (
@@ -281,13 +297,36 @@ function RunVersionPicker({ groupId, row }: { groupId: string; row: Pipeline }) 
   );
 }
 
-function RunForm({ groupId, row, version }: { groupId: string; row: Pipeline; version: Version }) {
+function RunForm({
+  groupId,
+  row,
+  version,
+  run,
+}: {
+  groupId: string;
+  row: Pipeline;
+  version: Version;
+  run?: Run;
+}) {
   const group = useOutletContext<Group>();
   const [frozen] = useState(version);
-  const [name, setName] = useState('');
-  const [engine, setEngine] = useState('NATIVE_ARGO');
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [supplied, setSupplied] = useState<Record<string, boolean>>({});
+  const [runRevision] = useState(run?.revision);
+  const [name, setName] = useState(run?.name ?? '');
+  const [engine, setEngine] = useState(run?.engine ?? 'NATIVE_ARGO');
+  // Do not silently carry parameters across a version/schema change. Credential
+  // references always require deliberate re-entry; no secret is prefilled.
+  const initialValues =
+    run &&
+    run.versionId === version.id &&
+    (run.versionRevision ?? run.spec.versionRevision) === version.revision
+      ? (run.spec.values ?? []).filter((v) => v.value !== undefined && !v.credentialRef)
+      : [];
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialValues.map((v) => [v.name, v.value!])),
+  );
+  const [supplied, setSupplied] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(initialValues.map((v) => [v.name, true])),
+  );
   const report = useQuery({
     queryKey: pipelineKeys.query(
       groupId,
@@ -308,19 +347,24 @@ function RunForm({ groupId, row, version }: { groupId: string; row: Pipeline; ve
     <Card title={`${frozen.name} · r${frozen.revision}`}>
       <CommandForm
         groupId={groupId}
-        path={`${pipelinePath(groupId, row.id)}/runs`}
-        destination={`/workspaces/${groupId}/pipelines/${row.id}`}
-        resultLink="run"
-        label="提交运行"
+        path={run ? runPath(groupId, run.id) : `${pipelinePath(groupId, row.id)}/runs`}
+        method={run ? 'PUT' : 'POST'}
+        destination={
+          run
+            ? `/workspaces/${groupId}/pipeline-runs/${run.id}`
+            : `/workspaces/${groupId}/pipelines/${row.id}`
+        }
+        resultLink={run ? undefined : 'run'}
+        label={run ? '保存配置并请求清理旧实例' : '提交运行'}
         disabled={
           !!row.deletedAt ||
           group.status !== 'ACTIVE' ||
           frozen.revision !== version.revision ||
+          (!!run && (run.revision !== runRevision || !canManageRun(run) || !!run.pendingSpec)) ||
           (engine === 'NATIVE_ARGO' && !nativeReady)
         }
         payload={() => ({
-          name: pipelineName.parse(name),
-          engine,
+          ...(run ? { revision: runRevision } : { name: pipelineName.parse(name), engine }),
           versionId: frozen.id,
           versionRevision: frozen.revision,
           parameters: parameterValues(frozen.spec.parameters ?? [], values, supplied),
@@ -328,6 +372,7 @@ function RunForm({ groupId, row, version }: { groupId: string; row: Pipeline; ve
       >
         <Input
           label="运行名称"
+          disabled={!!run}
           required
           value={name}
           maxLength={63}
@@ -335,6 +380,7 @@ function RunForm({ groupId, row, version }: { groupId: string; row: Pipeline; ve
         />
         <Select
           label="执行引擎"
+          disabled={!!run}
           value={engine}
           onChange={setEngine}
           options={[
@@ -342,6 +388,16 @@ function RunForm({ groupId, row, version }: { groupId: string; row: Pipeline; ve
             { value: 'KFP', label: '外部 KFP（需部署并配置）' },
           ]}
         />
+        {run && (
+          <Alert color="warning" title="保存不会自动启动">
+            名称与引擎保持不变。保存可能中断当前任务并清理旧实例，请确认后提交；已有产物不会删除。不同版本或新修订的参数不自动沿用，凭据引用需重新填写。
+          </Alert>
+        )}
+        {run && run.revision !== runRevision && (
+          <Alert color="warning" title="运行修订已变化">
+            输入已保留，请复制草稿并核对运行详情后重新打开编辑页面。
+          </Alert>
+        )}
         {engine === 'NATIVE_ARGO' ? (
           <QueryState query={report}>
             {(value) => <CompatibilitySummary report={value} />}

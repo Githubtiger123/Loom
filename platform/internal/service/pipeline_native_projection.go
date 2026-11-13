@@ -146,7 +146,16 @@ func (s *Service) nativePipelineRuntime(ctx context.Context, actor uint64, run *
 	if err != nil {
 		return nil, err
 	}
-	result := &PipelineRuntime{State: data.dag.State, Tasks: []PipelineRuntimeTask{}}
+	result := &PipelineRuntime{InstanceID: run.InstanceID, Revision: run.Revision, State: data.dag.State, Tasks: []PipelineRuntimeTask{}}
+	attempt, readErr := s.Store.PipelineRunAttempt(ctx, run.GroupID, run.ID, run.InstanceID, false)
+	if readErr != nil && !errors.Is(readErr, gorm.ErrRecordNotFound) {
+		return nil, readErr
+	}
+	if readErr == nil {
+		result.Diagnostics = &PipelineRuntimeDiagnostics{EngineRelease: attempt.EngineRevision, WorkflowName: attempt.WorkflowName, WorkflowUID: attempt.WorkflowUID, PlanDigest: attempt.PlanHash, Phase: attempt.Phase, Reason: attempt.Reason, SyncReason: attempt.SyncReason, ObservedAt: attempt.ObservedAt, SyncAttemptedAt: attempt.SyncAttemptedAt, ArchivedAt: attempt.WorkflowArchivedAt}
+		result.CreatedAt = attempt.CreatedAt.UTC().Format(time.RFC3339Nano)
+		result.FinishedAt = nativeTimeString(attempt.FinishedAt)
+	}
 	if run.ExternalID != nil {
 		result.ExternalID = *run.ExternalID
 	}

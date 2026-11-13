@@ -12,6 +12,7 @@ import { pipelineApi, pipelineKeys } from '../api';
 export function CommandForm({
   groupId,
   path,
+  method = 'POST',
   destination,
   payload,
   disabled,
@@ -21,6 +22,7 @@ export function CommandForm({
 }: {
   groupId: string;
   path: string;
+  method?: 'POST' | 'PUT';
   destination: string;
   payload: () => unknown;
   disabled?: boolean;
@@ -35,7 +37,8 @@ export function CommandForm({
   const [validation, setValidation] = useState<unknown>();
   const mutation = useMutation({
     retry: false,
-    mutationFn: (body: unknown) => pipelineApi.create(path, body, commandKey({ path, body })),
+    mutationFn: (body: unknown) =>
+      pipelineApi.command(path, method, body, commandKey({ path, method, body })),
     onSuccess: (operation) => {
       void client.invalidateQueries({ queryKey: pipelineKeys.all(groupId) });
       if (!mounted.current) return;

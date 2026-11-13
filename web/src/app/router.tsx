@@ -37,10 +37,12 @@ import { PipelinesPage } from '@/features/pipelines/pipelines-page';
 import { PipelineDetailPage, PipelineVersionPage } from '@/features/pipelines/pipeline-detail-page';
 import {
   CreatePipelinePage,
+  EditPipelineRunPage,
   ImportPipelineVersionPage,
   SubmitPipelineRunPage,
 } from '@/features/pipelines/pipeline-form-pages';
 import { PipelineRunDetailPage } from '@/features/pipelines/run-detail-page';
+import { EditPipelineVersionPage } from '@/features/pipelines/version-edit-page';
 import { ModelsPage } from '@/features/models/models-page';
 import { ModelDetailPage } from '@/features/models/model-detail-page';
 import { ModelVersionPage } from '@/features/models/version-detail-page';
@@ -119,8 +121,13 @@ export const router = createBrowserRouter([
           { path: 'pipelines/:pipelineId', element: <PipelineDetailPage /> },
           { path: 'pipelines/:pipelineId/versions/new', element: <ImportPipelineVersionPage /> },
           { path: 'pipelines/:pipelineId/versions/:versionId', element: <PipelineVersionPage /> },
+          {
+            path: 'pipelines/:pipelineId/versions/:versionId/edit',
+            element: <EditPipelineVersionPage />,
+          },
           { path: 'pipelines/:pipelineId/run', element: <SubmitPipelineRunPage /> },
           { path: 'pipeline-runs/:runId', element: <PipelineRunDetailPage /> },
+          { path: 'pipeline-runs/:runId/edit', element: <EditPipelineRunPage /> },
           { path: 'models', element: <ModelsPage /> },
           { path: 'models/new', element: <CreateModelPage /> },
           { path: 'models/register-output', element: <RegisterOutputPage /> },

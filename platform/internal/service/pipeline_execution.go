@@ -413,11 +413,29 @@ func (s *Service) yieldPipelineExecution(ctx context.Context, claim *MLExecution
 
 // 下游 Runtime 接口只返回经筛选的任务信息，不代理任意 KFP URL/PodSpec/凭据。
 type PipelineRuntime struct {
-	ExternalID string                `json:"externalId"`
-	State      string                `json:"state"`
-	CreatedAt  string                `json:"createdAt"`
-	FinishedAt string                `json:"finishedAt"`
-	Tasks      []PipelineRuntimeTask `json:"tasks"`
+	InstanceID  string                      `json:"instanceId"`
+	Revision    uint64                      `json:"revision"`
+	ExternalID  string                      `json:"externalId"`
+	State       string                      `json:"state"`
+	CreatedAt   string                      `json:"createdAt"`
+	FinishedAt  string                      `json:"finishedAt"`
+	Tasks       []PipelineRuntimeTask       `json:"tasks"`
+	Diagnostics *PipelineRuntimeDiagnostics `json:"diagnostics,omitempty"`
+}
+
+// Only allowlisted execution identity/status. Never return the frozen manifest,
+// Runtime policy, storage session, command arguments, raw logs or credentials.
+type PipelineRuntimeDiagnostics struct {
+	EngineRelease   *string    `json:"engineRelease,omitempty"`
+	WorkflowName    *string    `json:"workflowName,omitempty"`
+	WorkflowUID     *string    `json:"workflowUID,omitempty"`
+	PlanDigest      *string    `json:"planDigest,omitempty"`
+	Phase           *string    `json:"phase,omitempty"`
+	Reason          *string    `json:"reason,omitempty"`
+	SyncReason      *string    `json:"syncReason,omitempty"`
+	ObservedAt      *time.Time `json:"observedAt,omitempty"`
+	SyncAttemptedAt *time.Time `json:"syncAttemptedAt,omitempty"`
+	ArchivedAt      *time.Time `json:"archivedAt,omitempty"`
 }
 
 type PipelineRuntimeTask struct {
@@ -443,7 +461,7 @@ func (s *Service) PipelineRunRuntime(ctx context.Context, actor, groupID, id uin
 	if err != nil {
 		return nil, err
 	}
-	out := &PipelineRuntime{ExternalID: run.ID, State: run.State, CreatedAt: run.CreatedAt, FinishedAt: run.FinishedAt, Tasks: []PipelineRuntimeTask{}}
+	out := &PipelineRuntime{InstanceID: n.InstanceID, Revision: n.Revision, ExternalID: run.ID, State: run.State, CreatedAt: run.CreatedAt, FinishedAt: run.FinishedAt, Tasks: []PipelineRuntimeTask{}}
 	for _, task := range details.Tasks {
 		out.Tasks = append(out.Tasks, PipelineRuntimeTask{ID: task.ID, Name: task.Name, PodName: task.PodName, ExecutionID: task.ExecutionID.String(), State: task.State, ParentID: task.ParentID, StartTime: task.StartTime, EndTime: task.EndTime})
 	}
