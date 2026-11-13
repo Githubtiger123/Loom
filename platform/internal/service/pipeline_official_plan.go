@@ -70,7 +70,7 @@ func (s *Service) prepareOfficialPipelineAttempt(ctx context.Context, claim *MLE
 		objectstore.S3ParamEndpoint: s.PipelineConfig.NativeArtifactEndpoint, objectstore.S3ParamRegion: s.PipelineConfig.NativeArtifactRegion,
 		objectstore.S3ParamDisableSSL: strconv.FormatBool(s.PipelineConfig.NativeArtifactInsecure), objectstore.S3ParamForcePathStyle: "true",
 	}}
-	if _, err := objectstore.ParseBucketConfig(request.Options.PipelineRoot, session); err != nil {
+	if _, err := objectstore.ParseBucketConfig(request.Options.PipelineRoot, &session); err != nil {
 		return nil, err
 	}
 	storeJSON, err := json.Marshal(session)
