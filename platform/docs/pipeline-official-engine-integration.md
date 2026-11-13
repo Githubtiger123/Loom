@@ -395,3 +395,13 @@ importer、artifact iterator、Kubernetes platform/PVC/workspace、Trainer/Volca
 - 诊断页签按可见状态加载，按空间／运行／实例／修订隔离缓存，失败不展示旧 runtime 数据。该接口不提供实时 Kubernetes Event；镜像拉取、调度等根因仍需集群诊断，UI 不猜测。关联操作单、DAG 和日志仍是提交失败和组件输出错误的入口。
 
 本次只做源码阅读、修改、格式化和差异检查，未构建、类型检查、运行测试或做浏览器／集群联调。
+
+### 16.6 节点交互、历史日志定位与只读文件目录（源码）
+
+- DAG 节点以可读卡片展示固定 IR 的触发策略／CEL 条件、迭代来源、并行度、重试上限与退避、缓存开关；新增 `iteratorPolicy` 只读投影，复用官方语义，不在浏览器求值，不改变执行内核。原始字段仍可折叠查看，未识别字段不推测默认行为。
+- 实例表可按状态、节点能力、缓存命中证据、历史重试、精确迭代索引和名称／Pod 过滤，显示匹配数量。能力筛选仅用后端定义映射，不凭显示名猜测。历史 Pod 日志链接携带实例／任务／Pod UID，前端从后端已授权归档清单精确选择；无发布日志则显示缺失，不跳到其他 Pod 或缓存源日志。
+- 新增 GET `/groups/{gid}/pipeline-runs/{rid}/artifacts/{artifactId}/files`，以及 `/files/preview`、`/files/download`。列表响应为相对文件名、大小、ETag、directory 与 manifestDigest；内容参数只允许 instanceId/path/manifestDigest/etag。列表不含内部 URI、Bucket、Key 或凭据。
+- 复用官方 `InventoryOfficial`、产物所属 execution 的已发布输出验证、冻结 PipelineRoot 和既有受限预览；内容读取使用 If-Match，结束后复核目录摘要与运行身份／权限；慢 IO 后仍检查认证会话。ETag 是一致性条件，不是内容防篡改证明或对象锁。所有读接口继续受 handler 并发缓冲限制。
+- 限制为当前官方原生执行产物；外部 KFP 与旧 tar 归档保留原下载接口，不猜测布局。最多 4096 文件、64 层路径、单文件预览 2 MiB／下载 32 MiB。目录树按清单生成，支持路径导航、全目录文件路径搜索、单文件只读预览和下载，不做上传／编辑／删除；不解包任意 ZIP，不执行 Python／模型／HTML 脚本。无新增表或迁移。
+
+按仓库约定仅阅读、修改及格式核对源码，未新增或运行测试，未编译、类型检查、启动服务或执行集群／存储验收。

@@ -34,6 +34,19 @@ type OfficialInventory struct {
 	Files     []OfficialFile `json:"files"`
 }
 
+// Exact conditional read; caller must resolve membership from the inventory.
+// root and uri come exclusively from an authorized, frozen runtime artifact.
+func (r *Reader) ReadOfficialFile(ctx context.Context, root, uri, etag string, limit int64) (*Object, error) {
+	key, err := r.officialKey(root, uri)
+	if err != nil {
+		return nil, err
+	}
+	if etag == "" {
+		return nil, apperr.New(apperr.CodeInvalid, "缺少文件版本")
+	}
+	return r.readKeyMatch(ctx, key, limit, etag)
+}
+
 func (v OfficialInventory) Digest() string {
 	raw, _ := json.Marshal(v)
 	return fmt.Sprintf("%x", sha256.Sum256(raw))

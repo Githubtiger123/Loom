@@ -2,6 +2,8 @@ import { api, apiDownload, ApiError } from '@/lib/api';
 import type { Operation, Page } from '@/lib/types';
 import type {
   ArtifactResult,
+  ArtifactFile,
+  ArtifactFiles,
   Attempt,
   Compatibility,
   DAG,
@@ -87,6 +89,33 @@ export const pipelineApi = {
     api<ArtifactResult>(
       `${runPath(g, run.id)}/artifacts/${segment(artifact)}/preview?instanceId=${segment(run.instanceId)}`,
       { signal },
+    ),
+  files: (g: string, run: Run, artifact: string, signal: AbortSignal) =>
+    api<ArtifactFiles>(
+      `${runPath(g, run.id)}/artifacts/${segment(artifact)}/files?instanceId=${segment(run.instanceId)}`,
+      { signal },
+    ),
+  filePreview: (
+    g: string,
+    run: Run,
+    listing: ArtifactFiles,
+    file: ArtifactFile,
+    signal: AbortSignal,
+  ) =>
+    api<ArtifactResult>(
+      `${runPath(g, run.id)}/artifacts/${segment(listing.artifactId)}/files/preview?${new URLSearchParams({ instanceId: run.instanceId, path: file.name, manifestDigest: listing.manifestDigest, etag: file.etag })}`,
+      { signal },
+    ),
+  fileDownload: (
+    g: string,
+    run: Run,
+    listing: ArtifactFiles,
+    file: ArtifactFile,
+    signal: AbortSignal,
+  ) =>
+    apiDownload(
+      `${runPath(g, run.id)}/artifacts/${segment(listing.artifactId)}/files/download?${new URLSearchParams({ instanceId: run.instanceId, path: file.name, manifestDigest: listing.manifestDigest, etag: file.etag })}`,
+      signal,
     ),
   download: (g: string, run: Run, artifact: string, signal: AbortSignal) =>
     apiDownload(

@@ -153,7 +153,9 @@ function RunContent({
       {tab === 'diagnostics' && (
         <RuntimePanel key={panelKey} groupId={groupId} run={run} onOperation={onOperation} />
       )}
-      {tab === 'logs' && canLogs && <LogsPanel key={panelKey} groupId={groupId} run={run} />}
+      {tab === 'logs' && canLogs && (
+        <LogsPanel key={`${panelKey}/${search.toString()}`} groupId={groupId} run={run} />
+      )}
       {stopping && canStopRun && (
         <StopRunDialog
           groupId={groupId}

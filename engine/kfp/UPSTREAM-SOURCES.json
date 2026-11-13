@@ -113,6 +113,12 @@
       "patches": ["preserve official flags/output files; inject scoped Runtime API clients and frozen store", "reject importer/platform entry points", "remove full IR/options debug dumps"]
     },
     {
+      "upstream": "backend/src/v2/cmd/driver/execution_paths.go",
+      "local": "cmd/driver/execution_paths.go",
+      "sha256": "3a6b394bc443b4e7dd86b97155fe8204b6a7f8dd7caab70938a7bb6c4f9895c4",
+      "patches": []
+    },
+    {
       "upstream": "backend/src/v2/cmd/launcher-v2/main.go",
       "local": "cmd/launcher-v2/main.go",
       "sha256": "d826728ad16699abc63b0e3e46c93653f0406dd82b9a0e5c120eec5b101b0148",

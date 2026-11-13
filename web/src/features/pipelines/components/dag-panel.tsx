@@ -1,13 +1,16 @@
 import { useId, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Card, Select, Table } from '@atomus';
+import { Button, Card, Input, Select, Table } from '@atomus';
 import { NoData, StatusBadge } from '@/components/feedback';
 import { ApiError } from '@/lib/api';
 import { pipelineApi, pipelineKeys, pollPipeline } from '../api';
 import type { DAG, Definition, Edge, NodeIO, Run } from '../types';
 import { QueryState } from './query-state';
 import { ArtifactAccess } from './visualizations-panel';
-import { formatTime } from '../policy';
+import { formatTime, usePipelineAccess } from '../policy';
+import { NodePolicySummary, hasCondition, hasLoop } from './node-policy-summary';
+import { pipelineLogLink } from './log-link';
 
 export function DagPanel({ groupId, run }: { groupId: string; run: Run }) {
   const query = useQuery({
@@ -50,6 +53,13 @@ function DagContent({ groupId, run, dag }: { groupId: string; run: Run; dag: DAG
   const [scope, setScope] = useState('root');
   const [node, setNode] = useState('');
   const [definition, setDefinition] = useState('');
+  const [status, setStatus] = useState('all');
+  const [kind, setKind] = useState('all');
+  const [cache, setCache] = useState('all');
+  const [retry, setRetry] = useState('all');
+  const [search, setSearch] = useState('');
+  const [iteration, setIteration] = useState('');
+  const access = usePipelineAccess(groupId);
   const definitions = dag.definitions ?? [];
   const scopes = definitions.filter((d) =>
     definitions.some((child) => child.parentNodeId === d.nodeId),
@@ -57,9 +67,29 @@ function DagContent({ groupId, run, dag }: { groupId: string; run: Run; dag: DAG
   const currentScope = scopes.some((d) => d.nodeId === scope) ? scope : (scopes[0]?.nodeId ?? '');
   const visible = definitions.filter((d) => d.parentNodeId === currentScope);
   const edges = (dag.edges ?? []).filter((e) => e.scopeNodeId === currentScope);
-  const instances = (dag.instances ?? []).filter(
-    (item) => !definition || item.definitionNodeId === definition,
-  );
+  const definitionsByID = new Map(definitions.map((d) => [d.nodeId, d]));
+  const instances = (dag.instances ?? []).filter((item) => {
+    const d = item.definitionNodeId ? definitionsByID.get(item.definitionNodeId) : undefined;
+    const hit = !!item.cachedExecutionId || item.state === 'CACHED';
+    return (
+      (!definition || item.definitionNodeId === definition) &&
+      (status === 'all' || item.state === status) &&
+      (kind === 'all' ||
+        (kind === 'condition'
+          ? hasCondition(d)
+          : kind === 'loop'
+            ? hasLoop(d)
+            : d?.kind === kind)) &&
+      (cache === 'all' || (cache === 'hit' ? hit : !hit)) &&
+      (retry === 'all' || !!item.retries?.length) &&
+      (!iteration.trim() ||
+        (item.iterationIndex !== undefined &&
+          JSON.stringify(item.iterationIndex) === iteration.trim())) &&
+      `${item.name} ${item.nodeId} ${item.podName ?? ''}`
+        .toLowerCase()
+        .includes(search.trim().toLowerCase())
+    );
+  });
   const activeNode =
     node && [...definitions, ...(dag.instances ?? [])].some((item) => item.nodeId === node)
       ? node
@@ -123,12 +153,91 @@ function DagContent({ groupId, run, dag }: { groupId: string; run: Run; dag: DAG
           </Button>
         )}
       </div>
+      <div className="pipeline-columns">
+        <Input
+          label="筛选节点／实例 ID／Pod"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select
+          label="实例状态"
+          value={status}
+          onChange={setStatus}
+          options={[
+            { value: 'all', label: '全部状态' },
+            ...[...new Set((dag.instances ?? []).map((item) => item.state))]
+              .sort()
+              .map((value) => ({ value, label: value })),
+          ]}
+        />
+        <Select
+          label="定义类型／能力"
+          value={kind}
+          onChange={setKind}
+          options={[
+            { value: 'all', label: '全部（包含未解析映射）' },
+            { value: 'EXECUTOR', label: '组件节点' },
+            { value: 'DAG', label: 'DAG 分组' },
+            { value: 'condition', label: '声明条件的节点' },
+            { value: 'loop', label: '声明循环的节点' },
+          ]}
+        />
+        <Select
+          label="缓存证据"
+          value={cache}
+          onChange={setCache}
+          options={[
+            { value: 'all', label: '全部' },
+            { value: 'hit', label: '有命中证据' },
+            { value: 'none', label: '未发现命中证据（不等于禁用）' },
+          ]}
+        />
+        <Select
+          label="历史重试记录"
+          value={retry}
+          onChange={setRetry}
+          options={[
+            { value: 'all', label: '全部' },
+            { value: 'history', label: '有物理重试历史' },
+          ]}
+        />
+        <Input
+          label="精确迭代索引（按记录值，不加一）"
+          value={iteration}
+          onChange={(e) => setIteration(e.target.value)}
+          placeholder="如 0；留空不限"
+        />
+      </div>
+      <div className="actions">
+        <span className="small muted">
+          显示 {instances.length} / {dag.instances?.length ?? 0}{' '}
+          个实例。类型筛选只使用已解析的定义映射，不按名称猜测。
+        </span>
+        <Button
+          hierarchy="link"
+          size="sm"
+          onClick={() => {
+            setDefinition('');
+            setStatus('all');
+            setKind('all');
+            setCache('all');
+            setRetry('all');
+            setSearch('');
+            setIteration('');
+          }}
+        >
+          清除全部筛选
+        </Button>
+      </div>
       <Table
         rows={instances}
         rowKey={(row) => row.nodeId}
         caption="实际节点、循环迭代和重试实例"
         empty={
-          <NoData title="还没有执行实例" description="任务未被调度、被跳过或运行状态尚未同步。" />
+          <NoData
+            title={dag.instances?.length ? '没有匹配筛选的实例' : '还没有执行实例'}
+            description="可清除筛选或刷新观测。暂无实例不代表成功或失败。"
+          />
         }
         columns={[
           {
@@ -158,6 +267,19 @@ function DagContent({ groupId, run, dag }: { groupId: string; run: Run; dag: DAG
             header: 'Pod',
             render: (row) =>
               row.podName || (row.cachedExecutionId ? '缓存命中（不创建 Pod）' : '—'),
+          },
+          { key: 'history', header: '历史 Pod', render: (row) => `${row.retries?.length ?? 0} 条` },
+          {
+            key: 'logs',
+            header: '日志',
+            render: (row) =>
+              access.allows('pipeline.logs', run) && row.taskId && row.podName ? (
+                <Link className="text-link" to={pipelineLogLink(groupId, run, row.taskId)}>
+                  查看日志
+                </Link>
+              ) : (
+                '—'
+              ),
           },
         ]}
       />
@@ -263,8 +385,8 @@ function DefinitionGraph({
             <strong>{d.displayName || d.taskName}</strong>
             <span className="small muted">
               {d.kind}
-              {d.parameterIterator ? ' · 循环' : ''}
-              {d.triggerPolicy ? ' · 条件' : ''}
+              {hasLoop(d) ? ' · 循环' : ''}
+              {hasCondition(d) ? ' · 条件' : ''}
             </span>
           </button>
         ))}
@@ -274,9 +396,15 @@ function DefinitionGraph({
 }
 
 function NodePanel({ groupId, run, node }: { groupId: string; run: Run; node: string }) {
+  const access = usePipelineAccess(groupId);
   const query = useQuery({
     queryKey: pipelineKeys.query(groupId, 'node', run.id, run.instanceId, run.revision, node),
-    queryFn: ({ signal }) => pipelineApi.node(groupId, run, node, signal),
+    queryFn: async ({ signal }) => {
+      const detail = await pipelineApi.node(groupId, run, node, signal);
+      if (detail.instanceId !== run.instanceId || detail.revision !== run.revision)
+        throw new ApiError(409, 'INSTANCE_CHANGED', '运行已变化，请刷新详情');
+      return detail;
+    },
     retry: false,
     gcTime: 0,
     refetchInterval: pollPipeline,
@@ -313,33 +441,38 @@ function NodePanel({ groupId, run, node }: { groupId: string; run: Run; node: st
                     <li key={attempt.podUID} className="break-word">
                       #{attempt.epoch + 1} · {attempt.podName} · {attempt.state}
                       {attempt.publicationReplayed ? ' · 复用已提交结果，未重复运行组件' : ''}
+                      {access.allows('pipeline.logs', run) &&
+                        attempt.podUID &&
+                        detail.instance?.taskId && (
+                          <>
+                            {' · '}
+                            <Link
+                              className="text-link"
+                              to={pipelineLogLink(
+                                groupId,
+                                run,
+                                detail.instance.taskId,
+                                attempt.podUID,
+                              )}
+                            >
+                              查看此 Pod 归档日志
+                            </Link>
+                          </>
+                        )}
                     </li>
                   ))}
                 </ul>
-                <p className="muted small">已发布的历史 Pod 日志可在离线日志面板查看。</p>
+                <p className="muted small">
+                  链接按任务与 Pod UID
+                  精确匹配已发布归档。未发布／回执重放可能没有独立归档，不自动显示其他 Pod。
+                </p>
               </details>
             )}
             <div className="pipeline-columns">
               <NodeIOPanel title="输入" io={detail.inputs} groupId={groupId} run={run} />
               <NodeIOPanel title="输出" io={detail.outputs} groupId={groupId} run={run} />
             </div>
-            {detail.definition && (
-              <details>
-                <summary>条件、循环、重试和缓存配置</summary>
-                <pre className="pipeline-code">
-                  {JSON.stringify(
-                    {
-                      triggerPolicy: detail.definition.triggerPolicy,
-                      parameterIterator: detail.definition.parameterIterator,
-                      retryPolicy: detail.definition.retryPolicy,
-                      cachingOptions: detail.definition.cachingOptions,
-                    },
-                    null,
-                    2,
-                  )}
-                </pre>
-              </details>
-            )}
+            {detail.definition && <NodePolicySummary definition={detail.definition} />}
           </div>
         )}
       </QueryState>

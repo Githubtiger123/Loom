@@ -166,6 +166,10 @@ func (r *Reader) VerifyOfficial(ctx context.Context, root, uri string) error {
 }
 
 func (r *Reader) readKey(ctx context.Context, key string, limit int64) (*Object, error) {
+	return r.readKeyMatch(ctx, key, limit, "")
+}
+
+func (r *Reader) readKeyMatch(ctx context.Context, key string, limit int64, expectedETag string) (*Object, error) {
 	if limit < 1 || limit > MaxDownloadBytes {
 		return nil, apperr.New(apperr.CodeInvalid, "产物读取大小无效")
 	}
@@ -185,6 +189,9 @@ func (r *Reader) readKey(ctx context.Context, key string, limit int64) (*Object,
 	}
 	if stat.Size < 0 || stat.Size > limit {
 		return nil, apperr.New(apperr.CodeQuotaExceeded, "产物超过读取上限，请生成较小的预览文件")
+	}
+	if expectedETag != "" && stat.ETag != expectedETag {
+		return nil, apperr.New(apperr.CodeConflict, "文件已变化，请刷新目录清单")
 	}
 	options := minio.GetObjectOptions{}
 	if err := options.SetMatchETag(stat.ETag); err != nil {

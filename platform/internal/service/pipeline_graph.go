@@ -35,6 +35,7 @@ type pipelineTaskSpec struct {
 	Retry             json.RawMessage                       `json:"retryPolicy,omitempty"`
 	ParameterIterator json.RawMessage                       `json:"parameterIterator,omitempty"`
 	ArtifactIterator  json.RawMessage                       `json:"artifactIterator,omitempty"`
+	IteratorPolicy    json.RawMessage                       `json:"iteratorPolicy,omitempty"`
 }
 
 type pipelineParameterSelector struct {
@@ -60,6 +61,7 @@ type PipelineNodeDefinition struct {
 	Retry             json.RawMessage                       `json:"retryPolicy,omitempty"`
 	ParameterIterator json.RawMessage                       `json:"parameterIterator,omitempty"`
 	ArtifactIterator  json.RawMessage                       `json:"artifactIterator,omitempty"`
+	IteratorPolicy    json.RawMessage                       `json:"iteratorPolicy,omitempty"`
 }
 type PipelineDAGEdge struct {
 	ScopeID    string `json:"scopeNodeId"`
@@ -97,7 +99,7 @@ func buildPipelineGraph(spec dto.PipelineRunSpec) (*pipelineGraph, error) {
 		if name == "" {
 			name = taskName
 		}
-		definition := PipelineNodeDefinition{ID: id, ParentID: parent, Path: path, TaskName: taskName, DisplayName: name, Component: task.Component.Name, Kind: kind, ExecutorLabel: component.ExecutorLabel, Inputs: component.Inputs, Outputs: component.Outputs, Bindings: task.Inputs, Trigger: task.Trigger, Caching: task.Caching, Retry: task.Retry, ParameterIterator: task.ParameterIterator, ArtifactIterator: task.ArtifactIterator}
+		definition := PipelineNodeDefinition{ID: id, ParentID: parent, Path: path, TaskName: taskName, DisplayName: name, Component: task.Component.Name, Kind: kind, ExecutorLabel: component.ExecutorLabel, Inputs: component.Inputs, Outputs: component.Outputs, Bindings: task.Inputs, Trigger: task.Trigger, Caching: task.Caching, Retry: task.Retry, ParameterIterator: task.ParameterIterator, ArtifactIterator: task.ArtifactIterator, IteratorPolicy: task.IteratorPolicy}
 		if component.DAG != nil {
 			definition.DAGOutputs = component.DAG.Outputs
 		}

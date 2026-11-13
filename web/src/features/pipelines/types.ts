@@ -100,6 +100,8 @@ export type Definition = {
   retryPolicy?: unknown;
   cachingOptions?: unknown;
   parameterIterator?: unknown;
+  artifactIterator?: unknown;
+  iteratorPolicy?: unknown;
 };
 export type NodeInstance = {
   retries?: {
@@ -210,9 +212,20 @@ export type ArchiveEntry = {
   id: string;
   taskId: string;
   pod: string;
+  podUID: string;
   container: string;
   sizeBytes: number;
   etag: string;
+};
+
+export type ArtifactFile = { name: string; sizeBytes: number; etag: string };
+export type ArtifactFiles = {
+  instanceId: string;
+  revision: number;
+  artifactId: string;
+  directory: boolean;
+  manifestDigest: string;
+  files: ArtifactFile[];
 };
 export type Manifest = {
   instanceId: string;

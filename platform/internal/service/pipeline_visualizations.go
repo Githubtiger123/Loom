@@ -326,33 +326,48 @@ func (s *Service) readOfficialArtifactContent(ctx context.Context, run *model.Pi
 	if !ok {
 		return nil, apperr.New(apperr.CodeUnavailable, "官方运行产物读取尚未配置")
 	}
+	root, uri, err := s.officialArtifactLocation(ctx, run, attempt, artifactID)
+	if err != nil {
+		return nil, err
+	}
+	if suffix == "" && limit == artifactstore.MaxDownloadBytes {
+		if directoryReader, ok := s.PipelineArtifacts.(interface {
+			DownloadOfficial(context.Context, string, string, int64) (*artifactstore.Object, error)
+		}); ok {
+			return directoryReader.DownloadOfficial(ctx, root, uri, limit)
+		}
+	}
+	return reader.ReadOfficial(ctx, root, uri, suffix, limit)
+}
+
+func (s *Service) officialArtifactLocation(ctx context.Context, run *model.PipelineRun, attempt *model.PipelineRunAttempt, artifactID string) (string, string, error) {
 	id, err := strconv.ParseInt(artifactID, 10, 64)
 	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != artifactID {
-		return nil, nativeFinalConflict()
+		return "", "", nativeFinalConflict()
 	}
 	scope := runtimeapi.Scope{GroupID: run.GroupID, RunID: run.ID, InstanceID: run.InstanceID}
 	row, err := s.Store.RuntimeObject(ctx, scope, id, "artifact")
 	if err != nil {
-		return nil, domainError(err)
+		return "", "", domainError(err)
 	}
 	var artifact runtimeapi.ArtifactRecord
 	parsed := &pb.Artifact{}
 	if json.Unmarshal(row.Value, &artifact) != nil || protojson.Unmarshal(artifact.Artifact, parsed) != nil || parsed.GetId() != id {
-		return nil, nativeFinalConflict()
+		return "", "", nativeFinalConflict()
 	}
 	producer, err := s.Store.RuntimeObject(ctx, scope, row.ParentID, "execution")
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
 	var execution runtimeExecution
 	if json.Unmarshal(producer.Value, &execution) != nil || !execution.Published {
-		return nil, nativeFinalConflict()
+		return "", "", nativeFinalConflict()
 	}
 	member := false
 	for _, output := range execution.Outputs {
 		published := &pb.Artifact{}
 		if protojson.Unmarshal(output.Artifact, published) != nil {
-			return nil, nativeFinalConflict()
+			return "", "", nativeFinalConflict()
 		}
 		if published.GetId() == id {
 			member = true
@@ -362,14 +377,7 @@ func (s *Service) readOfficialArtifactContent(ctx context.Context, run *model.Pi
 		RuntimePolicy runtimeapi.FrozenPolicy `json:"runtimePolicy"`
 	}
 	if !member || json.Unmarshal(attempt.Snapshot, &frozen) != nil || frozen.RuntimePolicy.Protocol != runtimeapi.Protocol || !validator.IsObjectURIWithin(frozen.RuntimePolicy.PipelineRoot, parsed.GetUri()) {
-		return nil, nativeFinalConflict()
+		return "", "", nativeFinalConflict()
 	}
-	if suffix == "" && limit == artifactstore.MaxDownloadBytes {
-		if directoryReader, ok := s.PipelineArtifacts.(interface {
-			DownloadOfficial(context.Context, string, string, int64) (*artifactstore.Object, error)
-		}); ok {
-			return directoryReader.DownloadOfficial(ctx, frozen.RuntimePolicy.PipelineRoot, parsed.GetUri(), limit)
-		}
-	}
-	return reader.ReadOfficial(ctx, frozen.RuntimePolicy.PipelineRoot, parsed.GetUri(), suffix, limit)
+	return frozen.RuntimePolicy.PipelineRoot, parsed.GetUri(), nil
 }

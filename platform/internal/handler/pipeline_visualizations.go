@@ -28,6 +28,15 @@ func (a *API) PipelineArtifactPreview(ctx context.Context, u *model.User, r *htt
 func (a *API) PipelineArtifactDownload(ctx context.Context, u *model.User, r *http.Request) (any, error) {
 	return a.pipelineVisualization(ctx, u, r, "download")
 }
+func (a *API) PipelineArtifactFiles(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	return a.pipelineVisualization(ctx, u, r, "files")
+}
+func (a *API) PipelineArtifactFilePreview(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	return a.pipelineVisualization(ctx, u, r, "file-preview")
+}
+func (a *API) PipelineArtifactFileDownload(ctx context.Context, u *model.User, r *http.Request) (any, error) {
+	return a.pipelineVisualization(ctx, u, r, "file-download")
+}
 
 func (a *API) pipelineVisualization(ctx context.Context, u *model.User, r *http.Request, mode string) (any, error) {
 	gid, rid, err := mlIDs(r, "rid")
@@ -40,10 +49,13 @@ func (a *API) pipelineVisualization(ctx context.Context, u *model.User, r *http.
 	}
 	instance := ""
 	for key, items := range query {
-		if key != "instanceId" || len(items) != 1 || items[0] == "" {
-			return nil, apperr.New(apperr.CodeInvalid, "只接受单个 instanceId 参数")
+		fileArgument := (mode == "file-preview" || mode == "file-download") && (key == "path" || key == "manifestDigest" || key == "etag")
+		if (key != "instanceId" && !fileArgument) || len(items) != 1 || items[0] == "" {
+			return nil, apperr.New(apperr.CodeInvalid, "不支持、为空或重复的产物读取参数")
 		}
-		instance = items[0]
+		if key == "instanceId" {
+			instance = items[0]
+		}
 	}
 	select {
 	case a.artifactReads <- struct{}{}:
@@ -60,6 +72,16 @@ func (a *API) pipelineVisualization(ctx context.Context, u *model.User, r *http.
 	response := &artifactResponse{release: release}
 	if mode == "" {
 		response.value, err = a.service.PipelineRunVisualizations(ctx, u.ID, gid, rid, r.PathValue("nodeId"), instance)
+	} else if mode == "files" {
+		response.value, err = a.service.PipelineArtifactFiles(ctx, u.ID, gid, rid, instance, r.PathValue("artifactId"))
+	} else if mode == "file-preview" || mode == "file-download" {
+		result, readErr := a.service.PipelineArtifactFileContent(ctx, u.ID, gid, rid, instance, r.PathValue("artifactId"), query.Get("path"), query.Get("manifestDigest"), query.Get("etag"), mode == "file-download")
+		err = readErr
+		if mode == "file-download" {
+			response.file = result
+		} else {
+			response.value = result
+		}
 	} else {
 		result, readErr := a.service.PipelineArtifactContent(ctx, u.ID, gid, rid, r.PathValue("nodeId"), instance, r.PathValue("artifactId"), mode == "download")
 		err = readErr

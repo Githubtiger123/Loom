@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Select, Tabs, Toggle } from '@atomus';
 import { NoData } from '@/components/feedback';
@@ -9,7 +10,13 @@ import { formatTime } from '../policy';
 import { QueryState } from './query-state';
 
 export function LogsPanel({ groupId, run }: { groupId: string; run: Run }) {
-  const [tab, setTab] = useState('live');
+  const [search] = useSearchParams();
+  const target = {
+    instance: search.get('logInstance') || run.instanceId,
+    task: search.get('logTask') || '',
+    podUID: search.get('logPodUID') || '',
+  };
+  const [tab, setTab] = useState(search.get('logSource') === 'archive' ? 'archive' : 'live');
   return (
     <div className="stack">
       <Tabs
@@ -25,22 +32,37 @@ export function LogsPanel({ groupId, run }: { groupId: string; run: Run }) {
         run.executionCleaned || run.deletedAt ? (
           <NoData title="执行已清理" description="请切换到离线归档查看历史日志。" />
         ) : (
-          <LiveLogs groupId={groupId} run={run} />
+          <LiveLogs
+            groupId={groupId}
+            run={run}
+            targetTask={target.task}
+            targetInstance={target.instance}
+          />
         )
       ) : (
-        <ArchiveAttempts groupId={groupId} run={run} />
+        <ArchiveAttempts groupId={groupId} run={run} target={target} />
       )}
     </div>
   );
 }
 
-function LiveLogs({ groupId, run }: { groupId: string; run: Run }) {
-  const [task, setTask] = useState('');
+function LiveLogs({
+  groupId,
+  run,
+  targetTask,
+  targetInstance,
+}: {
+  groupId: string;
+  run: Run;
+  targetTask: string;
+  targetInstance: string;
+}) {
+  const [task, setTask] = useState(targetTask);
   const dag = useQuery({
     queryKey: pipelineKeys.query(groupId, 'log-tasks', run.id, run.instanceId, run.revision),
     queryFn: async ({ signal }) => {
       const value = await pipelineApi.dag(groupId, run, signal);
-      if (value.instanceId !== run.instanceId)
+      if (value.instanceId !== run.instanceId || value.revision !== run.revision)
         throw new ApiError(409, 'INSTANCE_CHANGED', '运行实例已变化，请刷新详情');
       return value;
     },
@@ -66,8 +88,27 @@ function LiveLogs({ groupId, run }: { groupId: string; run: Run }) {
     >
       <QueryState query={dag}>
         {(value) => {
+          if (targetInstance !== run.instanceId)
+            return (
+              <NoData
+                title="链接指向历史执行实例"
+                description="在线日志只读取当前实例；请切换离线归档查看该历史实例，不自动切换到当前任务。"
+              />
+            );
           const nodes = (value.instances ?? []).filter((node) => node.taskId && node.podName);
-          const selected = nodes.find((node) => node.taskId === task) ?? nodes[0];
+          const selected = task ? nodes.find((node) => node.taskId === task) : nodes[0];
+          if (!selected && task)
+            return (
+              <div className="stack">
+                <NoData
+                  title="指定任务没有当前在线 Pod"
+                  description="不会自动切换到其他任务的日志。可切换离线归档查询精确历史 Pod；未发布的日志可能尚不可读。"
+                />
+                <Button hierarchy="outline" onClick={() => setTask('')}>
+                  清除任务定位
+                </Button>
+              </div>
+            );
           return nodes.length && selected?.taskId ? (
             <div className="stack">
               <Select
@@ -167,9 +208,18 @@ function LiveLogContent({ groupId, run, task }: { groupId: string; run: Run; tas
   );
 }
 
-function ArchiveAttempts({ groupId, run }: { groupId: string; run: Run }) {
+type LogTarget = { instance: string; task: string; podUID: string };
+function ArchiveAttempts({
+  groupId,
+  run,
+  target,
+}: {
+  groupId: string;
+  run: Run;
+  target: LogTarget;
+}) {
   const [after, setAfter] = useState(0);
-  const [instance, setInstance] = useState(run.instanceId);
+  const [instance, setInstance] = useState(target.instance);
   const attempts = useQuery({
     queryKey: pipelineKeys.query(groupId, 'attempts', run.id, run.instanceId, run.revision, after),
     queryFn: ({ signal }) => pipelineApi.attempts(groupId, run, after, signal),
@@ -192,6 +242,14 @@ function ArchiveAttempts({ groupId, run }: { groupId: string; run: Run }) {
                 label: `r${item.revision} · ${formatTime(item.createdAt)} · ${item.phase ?? '历史执行'}`,
               })),
           ];
+          if (
+            target.instance !== run.instanceId &&
+            !options.some((option) => option.value === target.instance)
+          )
+            options.push({
+              value: target.instance,
+              label: `链接指定的历史实例 · ${target.instance}`,
+            });
           const selected = options.some((option) => option.value === instance)
             ? instance
             : run.instanceId;
@@ -214,7 +272,13 @@ function ArchiveAttempts({ groupId, run }: { groupId: string; run: Run }) {
                   </Button>
                 )}
               </div>
-              <ArchiveManifest key={selected} groupId={groupId} run={run} instance={selected} />
+              <ArchiveManifest
+                key={selected}
+                groupId={groupId}
+                run={run}
+                instance={selected}
+                target={selected === target.instance ? target : undefined}
+              />
             </div>
           );
         }}
@@ -227,10 +291,12 @@ function ArchiveManifest({
   groupId,
   run,
   instance,
+  target,
 }: {
   groupId: string;
   run: Run;
   instance: string;
+  target?: LogTarget;
 }) {
   const query = useQuery({
     queryKey: pipelineKeys.query(groupId, 'log-manifest', run.id, run.revision, instance),
@@ -258,7 +324,15 @@ function ArchiveManifest({
         </Button>
       </div>
       <QueryState query={query}>
-        {(manifest) => <ArchiveFiles groupId={groupId} run={run} manifest={manifest} />}
+        {(manifest) => (
+          <ArchiveFiles
+            key={`${target?.task}/${target?.podUID}`}
+            groupId={groupId}
+            run={run}
+            manifest={manifest}
+            target={target}
+          />
+        )}
       </QueryState>
     </div>
   );
@@ -268,16 +342,42 @@ function ArchiveFiles({
   groupId,
   run,
   manifest,
+  target,
 }: {
   groupId: string;
   run: Run;
   manifest: Manifest;
+  target?: LogTarget;
 }) {
   const [entryId, setEntryId] = useState('');
-  const entries = manifest.entries ?? [];
+  const [focused, setFocused] = useState(!!(target?.task || target?.podUID));
+  const entries = (manifest.entries ?? []).filter(
+    (entry) =>
+      !focused ||
+      ((!target?.task || entry.taskId === target.task) &&
+        (!target?.podUID || entry.podUID === target.podUID)),
+  );
   const entry = entries.find((item) => item.id === entryId) ?? entries[0];
   return (
     <div className="stack">
+      {focused && (
+        <div className="stack">
+          <p className="small break-word">
+            精确定位：{target?.task || '任务未指定'}
+            {target?.podUID ? ` · Pod UID ${target.podUID}` : ''}
+          </p>
+          <Button
+            hierarchy="link"
+            size="sm"
+            onClick={() => {
+              setFocused(false);
+              setEntryId('');
+            }}
+          >
+            取消定位，查看此实例全部归档
+          </Button>
+        </div>
+      )}
       <p className="small muted">
         来源：{manifest.source} ·{' '}
         {manifest.complete ? '清单标记为归档完成' : '归档尚未完成或来源未提供完整性标记'}
@@ -303,8 +403,8 @@ function ArchiveFiles({
         </>
       ) : (
         <NoData
-          title="暂无归档文件"
-          description="可能仍在执行、归档未启用或上传尚未完成，不能据此认定没有日志。"
+          title={focused ? '指定任务／Pod 暂无已发布归档' : '暂无归档文件'}
+          description="可能仍在执行、归档未启用或上传尚未完成，不能据此认定没有日志；不会自动展示其他 Pod 的日志。"
         />
       )}
     </div>

@@ -236,7 +236,7 @@ func FileKind(a mlmd.Artifact) string {
 		return "IMAGE"
 	case ".json":
 		return "JSON"
-	case ".txt", ".log":
+	case ".txt", ".log", ".yaml", ".yml", ".py", ".sh", ".r", ".sql", ".toml", ".ini", ".cfg", ".conf", ".xml", ".jsonl", ".ndjson":
 		return "TEXT"
 	}
 	return ""

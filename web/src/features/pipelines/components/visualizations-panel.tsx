@@ -8,6 +8,7 @@ import { useGroupPermissions } from '@/lib/use-group-permissions';
 import { pipelineApi, pipelineKeys } from '../api';
 import type { Preview, Run, View } from '../types';
 import { QueryState } from './query-state';
+import { DirectoryBrowser } from './directory-browser';
 
 export function VisualizationsPanel({ groupId, run }: { groupId: string; run: Run }) {
   const permissions = useGroupPermissions(groupId);
@@ -241,6 +242,7 @@ export function ArtifactAccess({
   enabled: boolean;
 }) {
   const [preview, setPreview] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<unknown>();
   const mounted = useMounted();
@@ -310,9 +312,30 @@ export function ArtifactAccess({
         >
           下载产物
         </Button>
-        <span className="small muted">在线读取最多 32 MiB；目录按归档文件下载，不能直接预览。</span>
+        <span className="small muted">
+          产物下载最多 32 MiB；官方目录可浏览并逐文件预览，整个目录仍按 ZIP
+          下载。旧归档仅保留原下载入口。
+        </span>
+        {run.engine === 'NATIVE_ARGO' && (
+          <Button
+            hierarchy="outline"
+            size="sm"
+            disabled={!enabled}
+            onClick={() => setBrowsing((v) => !v)}
+          >
+            {browsing ? '收起文件目录' : '浏览文件目录'}
+          </Button>
+        )}
       </div>
       {error !== undefined && <ErrorState error={error} />}
+      {enabled && browsing && (
+        <DirectoryBrowser
+          groupId={groupId}
+          run={run}
+          artifact={artifact}
+          renderPreview={(value) => <ArtifactPreview preview={value} />}
+        />
+      )}
       {enabled && preview && (
         <QueryState query={query}>
           {(result) =>

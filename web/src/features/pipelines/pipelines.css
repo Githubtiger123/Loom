@@ -167,8 +167,28 @@
   border-radius: var(--radius-md);
   background: var(--color-bg-primary);
 }
+.pipeline-file-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr);
+  gap: var(--spacing-xl);
+}
+.pipeline-file-tree {
+  max-height: 480px;
+  overflow: auto;
+  border: 1px solid var(--color-border-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+.pipeline-file-tree ul {
+  list-style: none;
+  padding-left: var(--spacing-lg);
+}
+.pipeline-file-tree button[aria-current='location'] {
+  font-weight: 600;
+}
 @media (max-width: 800px) {
-  .pipeline-columns {
+  .pipeline-columns,
+  .pipeline-file-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 }
