@@ -46,7 +46,7 @@ type Service struct {
 }
 
 // The official backend must enforce existing operation leases and durable UID
-// binding. It is deliberately not installed by merely enabling a config flag.
+// binding. Installation is explicit and repository defaults remain disabled.
 type OfficialPipelineBackend interface {
 	kfpengine.Backend
 	Observe(context.Context, string, string) error

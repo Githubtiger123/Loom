@@ -34,8 +34,8 @@ export function VisualizationsPanel({ groupId, run }: { groupId: string; run: Ru
       </div>
       {run.engine === 'NATIVE_ARGO' && (
         <p className="muted small">
-          原生引擎当前支持数值 Metrics 与文件／目录产物。分类指标、HTML
-          等预览仅在后端实际返回该格式时展示，不代表原生编译器支持这些产物类型。
+          官方 KFP 引擎的指标按已发布元数据展示；文件可直接下载，目录按 ZIP 下载。 分类指标、HTML
+          等预览仅在后端实际返回对应格式时展示。成功归档的训练输出可注册为模型版本。
         </p>
       )}
       <QueryState query={query}>

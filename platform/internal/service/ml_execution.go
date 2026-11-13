@@ -573,6 +573,12 @@ func mlObservation(c *MLCommand, n *mlObject, e *mlExecution, in dto.ReportMLExe
 }
 
 func (s *Service) ReportMLExecution(ctx context.Context, peer, id string, in dto.ReportMLExecutionReq) (*MLExecutionView, error) {
+	return s.reportMLExecution(ctx, peer, id, in, nil)
+}
+
+// Native evidence can only be supplied by the in-process official lifecycle.
+// No HTTP DTO, executor certificate or request field constructs this proof.
+func (s *Service) reportMLExecution(ctx context.Context, peer, id string, in dto.ReportMLExecutionReq, proof *officialObservationProof) (*MLExecutionView, error) {
 	if !mlExecutionReportValid(peer, in) {
 		return nil, mlExecutionInvalid()
 	}
@@ -595,7 +601,11 @@ func (s *Service) ReportMLExecution(ctx context.Context, peer, id string, in dto
 			// Native start acceptance is not run success. The generic bridge
 			// cannot bypass node/output/final-snapshot gates or impersonate the
 			// future native finalizer. Exact committed replay above is read-only.
-			return apperr.New(apperr.CodeConflict, "原生 Argo 执行不接受通用执行回执，需通过内部生命周期收尾")
+			if err := s.verifyOfficialObservationProof(ctx, st, run, in, proof); err != nil {
+				return err
+			}
+		} else if proof != nil {
+			return mlExecutionConflict()
 		}
 		if err := mlLiveExecution(ctx, st, o, c, n, e, peer, in.MLExecutionLeaseReq); err != nil {
 			return err
@@ -618,6 +628,9 @@ func (s *Service) ReportMLExecution(ctx context.Context, peer, id string, in dto
 			(in.Outcome == "OBSERVED" && (e.LastObservedState == nil || *e.LastObservedState != in.ObservedState)) ||
 			(in.Outcome == "FAILED" && n.state.Status != "ERROR")
 		domain := map[string]any{}
+		if proof != nil && proof.absent && (c.Action == MLPipelineDelete || c.Action == MLPipelineEdit) {
+			domain["execution_cleaned"] = true
+		}
 		if in.Outcome == "OBSERVED" {
 			opStatus, domainStatus, err = mlObservation(c, n, e, in)
 			if err != nil {

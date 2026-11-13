@@ -1,0 +1,13 @@
+# Opt-in transport only. This component does NOT enable native submission.
+# Supply real TLS/CA resources and configuration after the runtime release gate.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+- service.yaml
+- rbac.yaml
+- network-policy.yaml
+patches:
+- path: api-patch.yaml
+  target:
+    kind: Deployment
+    name: loom-api

@@ -24,6 +24,7 @@ type PipelineDataSource struct {
 	ObservedAt *time.Time `json:"observedAt,omitempty"`
 }
 type PipelineNodeInstance struct {
+	Retries           []PipelineNodeRetry `json:"retries,omitempty"`
 	ID                string              `json:"nodeId"`
 	DefinitionID      string              `json:"definitionNodeId,omitempty"`
 	Mapping           string              `json:"mapping"` // EXACT or UNRESOLVED; never match by display name alone.
@@ -48,6 +49,14 @@ type PipelineNodeInstance struct {
 	History           []kfp.RuntimeStatus `json:"stateHistory"`
 	Children          []kfp.ChildTask     `json:"childTasks"`
 	Executor          *kfp.ExecutorDetail `json:"executor,omitempty"`
+}
+
+type PipelineNodeRetry struct {
+	Epoch               uint64 `json:"epoch"`
+	PodName             string `json:"podName"`
+	PodUID              string `json:"podUID"`
+	State               string `json:"state"`
+	PublicationReplayed bool   `json:"publicationReplayed"`
 }
 type PipelineDAG struct {
 	InstanceID    string                   `json:"instanceId"`

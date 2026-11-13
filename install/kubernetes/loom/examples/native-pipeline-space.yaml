@@ -13,6 +13,11 @@ rules:
   - apiGroups: [argoproj.io]
     resources: [workflowtaskresults]
     verbs: [create, patch]
+  # The official objectstore client reads only this space-local credential.
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [loom-native-artifacts]
+    verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -26,5 +31,10 @@ subjects:
   - kind: ServiceAccount
     name: loom-pipeline-task
 # Provision Secret loom-native-artifacts separately with accessKey/secretKey.
-# Use a dedicated per-space writer, scoped to that group's loom-native prefix.
+# Use a dedicated per-space writer, scoped to the configured official root's
+# <group-id>/<namespace-uid>/ prefix (legacy v3 uses a different loom-native root).
 # Do not put real storage credentials into this example or grant root access.
+# Official runtime also needs ConfigMap loom-pipeline-runtime-ca with ca.crt.
+# The server TLS private key stays in loom-system; NEVER copy it to components.
+# Label verified namespaces loom.ml/pipeline-runtime-access=true only when the
+# optional runtime NetworkPolicy is used. Labels alone do not grant API access.

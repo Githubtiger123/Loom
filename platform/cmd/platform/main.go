@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -163,6 +164,10 @@ func main() {
 		runner.Service.NotebookImages = notebookImages
 		configurePipeline(runner.Service, cfg.Pipeline)
 		if *role == "pipeline-worker" {
+			if err := configureArtifactStore(runner.Service, cfg.ArtifactStore); err != nil {
+				logger.Error("官方 Pipeline 产物存储配置失败", "err", err)
+				os.Exit(1)
+			}
 			if err := configureLogArchive(runner.Service, cfg.LogArchive); err != nil {
 				logger.Error("Pipeline 日志归档配置失败", "err", err)
 				os.Exit(1)
@@ -421,6 +426,16 @@ func runAPI(ctx context.Context, cfg *config.Config, logger *slog.Logger, d *dep
 	}
 
 	servers := []*http.Server{srv}
+	if cfg.Pipeline.RuntimeEnabled {
+		if k8sClient == nil {
+			return fmt.Errorf("Pipeline runtime 需要可用的 Kubernetes TokenReview 客户端")
+		}
+		certificate, err := tls.LoadX509KeyPair(cfg.Pipeline.RuntimeTLSCert, cfg.Pipeline.RuntimeTLSKey)
+		if err != nil {
+			return fmt.Errorf("Pipeline runtime TLS 证书无法加载")
+		}
+		servers = append(servers, &http.Server{Addr: cfg.Pipeline.RuntimeAddr, Handler: route.NewPipelineRuntime(api), TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{certificate}}, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10, BaseContext: func(net.Listener) context.Context { return runCtx }})
+	}
 	if cfg.Executor.Enabled {
 		tlsConfig, err := executor.NewTLSConfig(cfg.Executor)
 		if err != nil {
@@ -442,7 +457,7 @@ func runAPI(ctx context.Context, cfg *config.Config, logger *slog.Logger, d *dep
 				logger.Info("HTTP 服务监听", "addr", server.Addr)
 				err = server.ListenAndServe()
 			} else {
-				logger.Info("执行器独立 mTLS 监听", "addr", server.Addr)
+				logger.Info("内部独立 TLS 监听", "addr", server.Addr)
 				err = server.ListenAndServeTLS("", "")
 			}
 			if err != nil && !errors.Is(err, http.ErrServerClosed) {

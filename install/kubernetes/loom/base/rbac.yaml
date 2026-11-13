@@ -246,11 +246,7 @@ rules:
   - apiGroups: [argoproj.io]
     resources: [workflows]
     verbs: [watch, create, patch, delete]
-  # Per-Workflow memoization projections; component execution identities must
-  # not receive these permissions. Argo's controller needs its own cache RBAC.
-  - apiGroups: [""]
-    resources: [configmaps]
-    verbs: [get, create]
+  # Official cache is persisted through Loom Runtime API, not ConfigMaps.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

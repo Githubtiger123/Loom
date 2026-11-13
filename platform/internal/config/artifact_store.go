@@ -9,17 +9,21 @@ import (
 )
 
 // ArtifactStore uses a dedicated read-only account, separate from archived logs.
-// Prefix is a namespace-scoped root, e.g. loom/pipelines/<namespace>/...
+// Optional CacheCopy credentials are a different, prefix-limited reader/writer;
+// they do not widen the primary account. Official attempts use frozen UID roots.
 type ArtifactStore struct {
-	Enabled      bool     `yaml:"enabled"`
-	Endpoint     string   `yaml:"endpoint"`
-	Bucket       string   `yaml:"bucket"`
-	Prefix       string   `yaml:"prefix"`
-	Region       string   `yaml:"region"`
-	AccessKey    string   `yaml:"access_key"`
-	SecretKey    string   `yaml:"secret_key"`
-	SessionToken string   `yaml:"session_token"`
-	Timeout      Duration `yaml:"timeout"`
+	CacheCopyAccessKey    string   `yaml:"cache_copy_access_key"`
+	CacheCopySecretKey    string   `yaml:"cache_copy_secret_key"`
+	CacheCopySessionToken string   `yaml:"cache_copy_session_token"`
+	Enabled               bool     `yaml:"enabled"`
+	Endpoint              string   `yaml:"endpoint"`
+	Bucket                string   `yaml:"bucket"`
+	Prefix                string   `yaml:"prefix"`
+	Region                string   `yaml:"region"`
+	AccessKey             string   `yaml:"access_key"`
+	SecretKey             string   `yaml:"secret_key"`
+	SessionToken          string   `yaml:"session_token"`
+	Timeout               Duration `yaml:"timeout"`
 }
 
 func (c ArtifactStore) Validate() error {
@@ -37,6 +41,12 @@ func (c ArtifactStore) Validate() error {
 	}
 	if c.Timeout.Std() < time.Second || c.Timeout.Std() > 30*time.Second {
 		return fmt.Errorf("artifact_store.timeout 必须在 1s–30s 之间")
+	}
+	if (c.CacheCopyAccessKey == "") != (c.CacheCopySecretKey == "") {
+		return fmt.Errorf("缓存复制凭据 access key/secret key 必须成对配置，不能复用只读凭据")
+	}
+	if (c.CacheCopyAccessKey != "" && c.CacheCopyAccessKey == c.AccessKey) || (c.CacheCopySessionToken != "" && c.CacheCopyAccessKey == "") {
+		return fmt.Errorf("缓存复制需独立账户，session token 不能脱离复制凭据配置")
 	}
 	return nil
 }

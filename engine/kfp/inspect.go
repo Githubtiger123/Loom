@@ -11,7 +11,7 @@ import (
 // Inspect validates the upstream schema and structural bounds only. It never
 // reports full compilation or runtime readiness without actually compiling.
 func Inspect(raw json.RawMessage) *Report {
-	report := &Report{CompilerVersion: CompilerVersion, ValidationMode: "OFFICIAL_SCHEMA_ONLY", ExecutionReason: "OFFICIAL_RUNTIME_ADAPTERS_NOT_CONNECTED", SupportedFeatures: []string{}, Issues: []Issue{}}
+	report := &Report{CompilerVersion: CompilerVersion, ValidationMode: "OFFICIAL_SCHEMA_ONLY", ExecutionReason: "OFFICIAL_RUNTIME_NOT_CONFIGURED_OR_UNVERIFIED", SupportedFeatures: []string{}, Issues: []Issue{}}
 	spec, err := decode(raw)
 	if err != nil {
 		report.Issues = append(report.Issues, Issue{Code: "KFP_PIPELINE_SPEC_INVALID", Path: "/"})

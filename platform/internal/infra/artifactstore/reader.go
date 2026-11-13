@@ -28,11 +28,12 @@ type Object struct {
 }
 
 type Reader struct {
-	client         *minio.Client
-	bucket, prefix string
-	timeout        time.Duration
-	endpoint       string
-	slots          chan struct{}
+	client          *minio.Client
+	cacheCopyClient *minio.Client
+	bucket, prefix  string
+	timeout         time.Duration
+	endpoint        string
+	slots           chan struct{}
 }
 
 func New(c config.ArtifactStore) (*Reader, error) {
@@ -50,7 +51,14 @@ func New(c config.ArtifactStore) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Reader{client: client, endpoint: u.Host, bucket: c.Bucket, prefix: c.Prefix, timeout: c.Timeout.Std(), slots: make(chan struct{}, 4)}, nil
+	var cacheCopyClient *minio.Client
+	if c.CacheCopyAccessKey != "" {
+		cacheCopyClient, err = minio.New(u.Host, &minio.Options{Creds: credentials.NewStaticV4(c.CacheCopyAccessKey, c.CacheCopySecretKey, c.CacheCopySessionToken), Secure: u.Scheme == "https", Region: c.Region, BucketLookup: minio.BucketLookupPath})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &Reader{client: client, cacheCopyClient: cacheCopyClient, endpoint: u.Host, bucket: c.Bucket, prefix: c.Prefix, timeout: c.Timeout.Std(), slots: make(chan struct{}, 4)}, nil
 }
 
 // Read accepts no user-supplied endpoint, key or provider credentials. Namespace
@@ -82,6 +90,79 @@ func (r *Reader) ReadNative(ctx context.Context, groupID uint64, namespaceUID, i
 		return nil, apperr.New(apperr.CodeForbidden, "原生产物不属于配置的存储或本次执行目录")
 	}
 	return r.readKey(ctx, key, limit)
+}
+
+// ReadOfficial accepts a root from the server's immutable attempt policy, never
+// from an HTTP argument. It retains this reader's fixed endpoint/bucket/prefix,
+// and reads exact files or the two upstream producer-preview filenames only.
+func (r *Reader) ReadOfficial(ctx context.Context, root, uri, suffix string, limit int64) (*Object, error) {
+	if !validator.IsObjectURIWithin(root, uri) || (suffix != "" && suffix != "/_kfp_preview.json" && suffix != ".kfp-preview.json") {
+		return nil, apperr.New(apperr.CodeForbidden, "产物不属于本次官方执行的冻结存储目录")
+	}
+	object, err := url.Parse(uri)
+	if err != nil || object.Host != r.bucket || (object.Scheme != "s3" && object.Scheme != "minio") || object.RawPath != "" {
+		return nil, apperr.New(apperr.CodeForbidden, "产物不属于已配置的对象存储")
+	}
+	key := strings.TrimPrefix(object.Path, "/")
+	if suffix != "" {
+		key = strings.TrimSuffix(key, "/")
+	}
+	if !strings.HasPrefix(key, r.prefix+"/") || !validator.IsArtifactKey(key+suffix) {
+		return nil, apperr.New(apperr.CodeForbidden, "产物超出后端只读凭据配置的目录")
+	}
+	return r.readKey(ctx, key+suffix, limit)
+}
+
+// VerifyOfficial checks exact files or a bounded directory prefix, without
+// downloading objects. It does not promise immutable content or enable cache
+// reuse: that requires a durable object-version/inventory publication protocol.
+func (r *Reader) VerifyOfficial(ctx context.Context, root, uri string) error {
+	if !validator.IsObjectURIWithin(root, uri) {
+		return apperr.New(apperr.CodeForbidden, "产物不属于冻结存储目录")
+	}
+	object, err := url.Parse(uri)
+	if err != nil || object.Host != r.bucket || (object.Scheme != "s3" && object.Scheme != "minio") || object.RawPath != "" {
+		return apperr.New(apperr.CodeForbidden, "产物不属于配置的对象存储")
+	}
+	key := strings.TrimPrefix(object.Path, "/")
+	if !validator.IsArtifactKey(strings.TrimSuffix(key, "/")) || !strings.HasPrefix(key, r.prefix+"/") {
+		return apperr.New(apperr.CodeForbidden, "产物超出后端存储权限目录")
+	}
+	select {
+	case r.slots <- struct{}{}:
+		defer func() { <-r.slots }()
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return apperr.New(apperr.CodeRateLimited, "产物存储验证繁忙")
+	}
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+	_, err = r.client.StatObject(ctx, r.bucket, key, minio.StatObjectOptions{})
+	if err == nil {
+		return nil
+	}
+	code := minio.ToErrorResponse(err).Code
+	if code != "NoSuchKey" && code != "NoSuchObject" {
+		return storageError(err)
+	}
+	count := 0
+	for item := range r.client.ListObjects(ctx, r.bucket, minio.ListObjectsOptions{Prefix: strings.TrimSuffix(key, "/") + "/", Recursive: true}) {
+		if item.Err != nil {
+			return storageError(item.Err)
+		}
+		count++
+		if count > 4096 {
+			return apperr.New(apperr.CodeQuotaExceeded, "目录产物超过 4096 个对象的验证上限")
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if count == 0 {
+		return apperr.New(apperr.CodeNotFound, "产物文件或目录尚未上传")
+	}
+	return nil
 }
 
 func (r *Reader) readKey(ctx context.Context, key string, limit int64) (*Object, error) {

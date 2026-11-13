@@ -94,3 +94,22 @@ kubectl --context YOUR_CONTEXT -n loom-system port-forward svc/loom-web 8080:80
 ## GitOps
 
 直接 `kubectl apply -k overlays/<name>` 会创建控制面和暂停的迁移模板，但不会自动执行迁移。GitOps 环境应在同步 Deployment 前单独运行同一镜像的 `-cmd=migrate` Job，并在它成功后继续 rollout；不要把迁移放进每个 Pod 的 initContainer。
+
+## 官方 Pipeline Runtime（可选）
+
+这是 Loom 内嵌官方 argocompiler/driver/launcher 的原生主线，不要求另装 KFP API/MLMD 或第二个数据库；现有外部 KFP 模式可继续保留。当前交付源码，未构建/部署/验收，不应直接替换仍管理旧 v3 运行的部署。完整状态见 [集成文档 §16](../../../platform/docs/pipeline-official-engine-integration.md#16-2026-11-13-当前源码状态与发布边界)。
+
+仅在准备好下列条件后，将 `components/pipeline-runtime` 显式加入所选 overlay 的 `components`；已有 pipeline/full 角色提供 pipeline-worker，但不会因加入此组件自动开启执行：
+
+1. 使用 `install/docker/Dockerfile.kfp-runtime` 的 `driver`、`launcher` target 或 Actions 输出，准备与 API/worker 同一 engine release 的镜像；在配置中填入真实 `@sha256` digest。不能用未接 Loom 客户端的原版官方二进制代替。
+2. 备份并显式执行完整 schema 迁移（包括 000028/000029），再升级应用；启动只检查，不自动迁移。本轮未执行迁移。
+3. 在 `loom-system` 准备 Secret `loom-pipeline-runtime-tls`（`tls.crt/tls.key`）。证书 SAN 包含 `loom-pipeline-runtime.loom-system.svc` 或实际配置的内部 DNS。不要关闭证书验证；私钥不复制进业务空间。
+4. 在每个已核验业务 namespace 配置 `loom-pipeline-runtime-ca` ConfigMap 的 `ca.crt`、`loom-pipeline-task` SA 及最小 Role/Binding，参考 `examples/native-pipeline-space.yaml`；配置各空间 `loom-native-artifacts` Secret 的 `accessKey/secretKey`。组件 SA 只读这一 Secret，不能访问数据库或任意 namespace 的凭据。
+5. 仅对这些空间添加 `loom.ml/pipeline-runtime-access=true`；可选 NetworkPolicy 只放行这些 namespace 的 Argo Workflow Pod 到独立 8444 端口。TokenReview RBAC 只绑定 API，不绑定用户组件或 worker；标签不替代逐请求身份校验。需确保 CNI 实际支持 NetworkPolicy，并按集群策略配置到 Kubernetes API/存储的出站访问。
+6. 合并 `examples/official-pipeline-runtime.config.yaml` 到私有配置，配置 Pod 可达的 HTTPS origin、TLS 文件、存储地址/桶/根路径和镜像 digest。该文件不是 Kubernetes 资源。`artifact_store` 的固定 endpoint/bucket 必须与组件写策略匹配，prefix 覆盖 `loom-official`。
+7. 准备独立的存储权限：后端 `artifact_store.access_key/secret_key` 只读；各空间组件 Secret 仅写对应 group/namespace UID 前缀并允许读取运行所需输入；模型登记使用 `model_store` 目标写账号。缓存开启额外配置 `artifact_store.cache_copy_access_key/cache_copy_secret_key`（可选 session token），只允许源 Get 与新 attempt 的 `__cache` 目标 Put，不能扩大原只读账号。用 Secret 注入对应 `LOOM_ARTIFACT_STORE_CACHE_COPY_*` 环境变量或受保护私有配置，不提交真实凭据。
+8. 初始设置 `runtime_enabled=true`、`native_observer_enabled=true`、`native_enabled=true`，缓存先保持 false；确认执行验收后才另行考虑开启缓存。开关默认均为 false，启动配置检查和兼容性 `runnable` 不代表服务可达或真实执行通过。API、pipeline-worker 必须使用一致配置及 artifact reader。
+
+缓存开启时所有组件镜像需固定 digest。缓存条目只在整个 Workflow 成功后可见，7 天过期，过期索引/未引用复制对象暂不自动清理；目录下载、日志及模型复制也有明确规模上限。存储需自行落实输出稳定、保留和写隔离策略，ETag/清单复核不等于不可变对象保证。
+
+正式切换前需要核验 Argo 默认值/准入对冻结 Workflow spec 的影响，以及 Python/参数/产物/条件循环/重试/停止/缓存/离线日志和模型登记闭环。本轮没有调用 Kubernetes、构建镜像或执行这些步骤。

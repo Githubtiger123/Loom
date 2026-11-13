@@ -302,3 +302,86 @@ P0 应先锁定一个官方 SDK/proto/compiler/runtime 组合，不能先承诺�
 依赖元数据核验尚未完成：国内 Go 代理返回 sumdb 404，改用官方代理后连接超时；新增依赖的 go.sum 尚未补齐。未关闭 checksum 校验、未伪造校验和。未编译、测试、启动、迁移、部署或调用 Kubernetes。本次只交付重构框架，不表示 P2 最小执行闭环通过。
 
 下一步以 P2 为主：先完成无缓存、两组件传参及结果登记，再沿官方协议接产物、动态控制流和缓存。不要回到另一套自研 IR 解释器。
+
+## 15. 2026-11-13 driver 接口、传输与机器身份源码进展
+
+本节更新 §14 的后续状态；仍未通过 P2 最小执行闭环。
+
+### 本次已实现的源码
+
+- `engine/kfp/internal/upstreamdriver` 保留固定 revision 的八个官方非测试文件。具体 metadata 客户端改成接口，补入官方 launcher 接口遗漏的两项 driver 方法；根 DAG 的存储配置显式注入，删除隐式 Kubernetes 配置读取与部分参数 debug dump。循环、条件、输入解析、缓存决策沿用官方代码，没有重新开发语义。其余日志仍是上游行为，不能宣称已全面脱敏。
+- `ExecuteDriver` 统一 ROOT_DAG/DAG/CONTAINER 调用，要求已注入受限客户端和固定 pipeline root，拒绝未适配的 Kubernetes platform 操作，插件使用官方 NoOpDispatcher。它不是 CLI 或提交器，也不代替授权。
+- `runtimeapi.Client` 使用官方 client-go TLS/轮换 token 文件，固定 HTTPS origin、禁止重定向、限制操作/报文/超时、校验协议，错误不返回 token 或原始响应体。内容寻址 requestId 仅用于后续幂等处理，服务端必须连同已验证身份及操作作用域校验，不能视为权限证明。
+- 平台通过官方 TokenReview 验证专用 audience 的 Pod-bound token，读取实时 namespace、SA、Pod 和 Workflow owner 身份。再用 GORM 查询唯一 attempt，核对 engine release、Workflow UID、空间实例及不可变 snapshot 中的 `runtimePolicy`，不采信请求自报 runId 或标签。
+- 上述认证只返回**运行级 scope**。driver/launcher 角色、分配的 task/execution ID、输入读取和输出发布权限仍必须单独校验，并在持久化事务内复核归属。
+- `runtimeclient.Cache` 实现官方 cache 接口，纯 key/fingerprint 算法摘自官方代码，查询/发布走 Runtime API；显式区分禁用、真实 miss 与请求失败。服务端必须把 launcher 的缓存发布先作为候选，输出原子发布成功后才能命中，不能信任客户端提交的 execution ID。
+- `UPSTREAM-SOURCES.json` 记录原始上游文件哈希、revision、摘录方法和修改清单，保留 Apache-2.0 许可及修改标记。新增直接依赖版本与该上游 revision 对齐，但 go.sum 尚未完成核验。
+
+### 尚未连接，不能视为已可用
+
+1. 官方 metadata 的 Pipeline/Execution 私有上下文字段需要最小构造器/codec 适配；随后实现真正的 Loom metadata 客户端。不能借用测试假客户端、unsafe 或伪造对象绕过。
+2. Runtime API 服务端操作、GORM 幂等读写、任务级授权、输出发布及缓存可见性仍未实现；没有注册路由或启动内部监听器。
+3. 提交器尚未冻结并写入 `runtimePolicy`（protocol、group instance、SA 名称/UID、engine revision、plan digest）；旧记录缺少策略时拒绝认证，不从当前可变配置猜测补齐。
+4. 未安装 TokenReview/Pod/Workflow 查询 RBAC、projected token、TLS/网络策略；未提供 driver/launcher CLI、镜像与官方节点投影，Backend 仍未注册。
+
+下步依次实现 metadata 构造与客户端 → scoped Runtime API/GORM 无缓存读写 → runtime CLI/镜像及受控提交 → 两组件闭环 → 产物/动态控制流/缓存。没有额外部署整套 MLMD 或 KFP 后端，没有引入第二个数据库。
+
+本次仅做源码对照、格式化与差异检查；按项目约定未新增测试、未编译或运行项目，未执行数据库或集群操作。原生入口继续禁用，不将保留官方语义的源码当作已验收功能。
+
+## 16. 2026-11-13 当前源码状态与发布边界
+
+本节是当前状态，覆盖 §14/§15 的“backend 未注册、缓存不可用、metadata/CLI/投影未接通、依赖未锁定”等历史描述。这里的“已实现”仅指源码，不表示 P2/P3/P4 运行验收通过。
+
+### 16.1 已连接的主链路
+
+1. Python 继续使用官方 KFP SDK 生成单文档 Pipeline IR；浏览器不执行 Python。定义、版本、运行、权限、operation 和审计仍由 Loom 管理。
+2. `engine/kfp` 真正调用官方 `argocompiler.Compile`。输入解析、表达式、循环、条件、DAG 和 launcher 参数/文件协议沿用固定 revision 的官方代码；无法直接依赖具体客户端的 driver/component 做最小接口化保留，来源、哈希和补丁见 `UPSTREAM-SOURCES.json`。
+3. 持久化官方计划和冻结策略 → 创建暂停 Workflow → 持久化 UID 绑定 → 有效租约/fence 下放行。后续恢复读取冻结计划，不用新配置重编译已有运行；停止/删除使用 UID/RV 条件，删除前持久归档，资源消失本身不证明成功。
+4. 官方 driver/launcher 通过独立 TLS Runtime API 访问同一 Loom 业务库，不连接 KFP API 或 MLMD。机器 token 绑定 audience/Pod，结合 TokenReview、实时 namespace/SA/Pod/Workflow UID、真实 Argo 节点和数据库冻结策略逐请求认证。
+5. Runtime 事务按 group → run → attempt 加锁，元数据、输出和回执原子写入；远程集群/对象存储 IO 不在 SQL 事务内。终态封存后拒绝新写入；精确回执重放不重复执行发布。
+6. Workflow Informer + WorkQueue 合并事件并退避重试，更新业务观测状态和已应用修订；不替代操作租约、不改变期望状态、不将 202 或“已创建 Pod”当成成功。通用 HTTP 回报不能伪造官方终态证明。
+
+### 16.2 本轮补齐的源码能力
+
+| 能力 | 当前实现与边界 |
+| --- | --- |
+| 参数、普通 Python、DAG、条件、循环 | 官方编译器和 driver/launcher 主线，平台执行规模和能力白名单限制；未证明所有嵌套组合兼容 |
+| 自动重试 | 只在真实同一 Argo Retry 的相邻物理节点间接管，保存 epoch 和历史；上一个 launcher 必须已结束。已提交 COMPLETE 的系统失败重试只重放输出，不重跑 Python。用户外部副作用不保证 exactly-once |
+| 缓存 | 官方 fingerprint/key 不变；launcher 发布候选，整个 Workflow 成功且输出/清单通过核验才写可见索引。重试保留原命中决定，缓存命中用目标 attempt 的新产物身份，不复用源日志 |
+| 文件和目录 | 官方原始对象布局；精确文件读取、目录清单与 ZIP 下载，非旧 v3 tar 协议；目录清单最多 4096 文件、ZIP 原文件合计最多 32 MiB |
+| 日志 | 保留真实 Pod 在线日志；从已发布 executor-logs 构建离线目录，Range/ETag 分段读取，包含物理重试历史。未发布日志显示不完整，不伪造归档 |
+| Metrics/可视化 | 复用现有参数/产物/数值指标和受限预览接口；Metrics 元数据型产物不强求不存在的对象。不是完整 KFP 可视化组件库 |
+| 模型登记 | 从成功且归档的输出证明解析来源，worker 按清单条件复制文件/目录到模型存储，再登记版本产物。最多 10 GiB，不完整复制不登记，未引用对象尚无自动回收 |
+| 前端 | 复用现有版本、运行、DAG、IO、Metrics、在线/离线日志和模型登记面板；新增重试 epoch/Pod 历史、目录 ZIP 提示及明确的“配置允许不等于已验收”说明 |
+
+缓存额外限制：同一空间 incarnation、namespace UID、流水线、创建者和引擎版本内匹配；命中前重新核验源运行未删、当前读权限、7 天有效期和源清单，复制到新 attempt 的 `__cache` 子目录。更改镜像标签不能作为稳定缓存代码身份，因此开启全局缓存时所有组件镜像须固定 `@sha256`。可见性比官方任务级缓存保守；过期索引、部分复制及未引用对象无自动 GC。使用自定义 cache key 时仍按上游语义由作者负责键的有效性。
+
+存储一致性使用 ETag 条件读/复制及结束清单复核，不等于对象锁、历史版本钉住或加密内容证明。拥有组件凭据/namespace 管理权限的人不是该运行内部的隔离租户。缓存仅适合输出稳定、无外部副作用组件；存储保留/写隔离策略必须由部署方落实。
+
+### 16.3 数据库、镜像与显式配置
+
+- `000028_pipeline_official_runtime.sql`：`tb_pipeline_runtime_object` 与 `tb_pipeline_runtime_receipt`；沿用已有 Pipeline、版本、运行和 attempt，避免为每种官方 protobuf 建一组业务表。
+- `000029_pipeline_official_cache.sql`：`tb_pipeline_runtime_cache`，只保存已确认成功执行的缓存索引及对象清单。默认禁用缓存也需要完整 schema，启动不 AutoMigrate。
+- `install/docker/Dockerfile.kfp-runtime` 两个 target 与发布 Actions 已提供 driver/launcher 镜像定义；不是直接使用上游未打适配补丁的镜像。实际镜像未在本轮构建。
+- `ConfigureOfficialPipeline` 仅在显式 native/observer 配置时注册 concrete backend；默认 `runtime_enabled/native_enabled/native_observer_enabled/native_cache_enabled=false`。`native_enabled` 需要 Runtime 和 observer；observer 也需要 Runtime。
+- 启动检查包含 DB/store、集群客户端、空间 verifier、产物 reader，缓存开启另需复制 reader/writer。它只是本地依赖/配置检查，不会证明服务可达、权限正确或存储可用；`runnable=true` 同样不是验收结果。
+- Runtime 可选 Kustomize component 和按空间 SA/凭据/CA 示例已提供，未自动纳入所有 overlay 或授予所有 namespace 权限。配置、TLS/RBAC/NetworkPolicy 与存储账户前置见 `install/kubernetes/loom/README.md`。
+
+存储凭据保持隔离：后端 `artifact_store` 主账户只读，组件使用各空间的 Secret 写受限路径，缓存复制另用 `cache_copy_*` 源读/目标写账户，模型存储使用独立 `model_store` 目标写账户。不给组件数据库账号，不把凭据或内部对象 URI 传给浏览器。缓存凭据环境变量为 `LOOM_ARTIFACT_STORE_CACHE_COPY_ACCESS_KEY/SECRET_KEY/SESSION_TOKEN`。
+
+### 16.4 仍未放行及发布验收
+
+importer、artifact iterator、Kubernetes platform/PVC/workspace、Trainer/Volcano、插件未接入白名单；不承诺完整 KFP SDK/IR/可视化兼容。旧 v3 数据只保留相应历史 SQL 证据；不能用新 runtime 恢复其执行或猜测日志/对象布局。
+
+严格冻结规格只允许 suspend/shutdown 生命周期差异。当前未把服务器 dry-run/admission 后规格作为新基线；若集群修改了其他 spec，运行会拒绝继续，而不是放宽身份验证。Argo 默认值/准入兼容必须在发布前检查；也未覆盖 offloaded/compressed 大型 Workflow status。
+
+最低发布核对清单（本轮均未执行）：
+
+1. 构建两个应用模块及 runtime 镜像；显式迁移 000028/000029；部署匹配 engine release 的 API/worker/driver/launcher 和 per-space CA/Secret/SA。
+2. 两任务普通 Python 传参、文件产物、Metrics 和真实 Pod 日志闭环；确认不访问 KFP API/MLMD，无第二数据库。
+3. 条件、循环、嵌套 DAG、普通失败重试及成功发布后的系统失败重试；API/worker 重启和响应丢失恢复。
+4. 缓存 miss/hit、参数/目录结果、重试决定稳定、源删除/过期/清单改变、撤权和跨空间拒绝；缓存无源日志串接。
+5. 离线日志分段读取、未完整归档提示、目录 ZIP、模型目录登记，以及停止/删除/成功竞态。
+6. 审查剩余上游错误日志是否泄露参数，验证 TLS/SAN/CA、TokenReview 和最小 RBAC、NetworkPolicy、存储读写/保留策略及 admission 行为。
+
+本轮已完成两个模块依赖 tidy，保持 checksum 校验；其余只做源码对照、gofmt/前端格式化、来源哈希和差异检查。按仓库约定未新增或运行测试，未编译、类型检查、启动项目、执行迁移、构建镜像或操作集群。因此不能把源码清单表述为“全部已经可用”，P2/P3/P4 的运行验收仍待执行。

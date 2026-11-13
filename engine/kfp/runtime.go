@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	client_manager "github.com/githubtiger123/loom/engine/kfp/internal/runtimeclients"
+	component "github.com/githubtiger123/loom/engine/kfp/internal/upstreamcomponent"
+	"github.com/githubtiger123/loom/engine/kfp/metadata"
 	"github.com/kubeflow/pipelines/backend/src/v2/cacheutils"
-	"github.com/kubeflow/pipelines/backend/src/v2/client_manager"
-	"github.com/kubeflow/pipelines/backend/src/v2/component"
-	"github.com/kubeflow/pipelines/backend/src/v2/metadata"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -22,12 +22,14 @@ type Clients struct {
 
 var _ client_manager.ClientManagerInterface = (*Clients)(nil)
 
+type LauncherOptions = component.LauncherV2Options
+
 func (c *Clients) K8sClient() kubernetes.Interface          { return c.Kubernetes }
 func (c *Clients) MetadataClient() metadata.ClientInterface { return c.Metadata }
 func (c *Clients) CacheClient() cacheutils.Client           { return c.Cache }
 
-// ExecuteComponent is the integration seam used by the future custom launcher
-// executable. Missing adapters fail closed, never fall back to MLMD defaults.
+// ExecuteComponent is the integration seam used by cmd/launcher-v2's executable.
+// Missing adapters fail closed, never fall back to MLMD defaults.
 func ExecuteComponent(ctx context.Context, executionID int64, executorInput, componentSpec string, command []string, options *component.LauncherV2Options, clients *Clients) error {
 	if clients == nil || clients.Kubernetes == nil || clients.Metadata == nil || clients.Cache == nil || options == nil {
 		return ErrRuntimeNotConnected

@@ -94,17 +94,26 @@ images:
 pipeline:
   # 复用官方 KFP v2 后端，执行角色使用 -cmd pipeline-worker；不改 Notebook worker。
   enabled: false
-  # 官方 runtime backend 尚未装配，先保持关闭；启用后 worker 会明确拒绝启动。
+  # 默认关闭。配置官方运行时镜像 digest、存储、TLS 后由运维显式启用。
   native_observer_enabled: false
-  # 原生执行已改为官方内核框架，尚不能提交；不会回退到已删除的自研引擎。
+  # 不会回退到已删除的自研引擎；源码未做运行验收。
   native_enabled: false
+  native_cache_enabled: false
+  # 独立工作负载 API，仅 TLS + audience 受限的 Pod token；不挂到用户 API。
+  # 需要部署端口、服务端 TLS、每空间 CA 与 TokenReview RBAC。
+  runtime_enabled: false
+  runtime_addr: ":8444"
+  runtime_endpoint: ""
+  runtime_tls_cert: ""
+  runtime_tls_key: ""
+  runtime_ca_config_map: loom-pipeline-runtime-ca
   # 待发布接入 Loom Runtime API 的运行时后，配置实际镜像@sha256:digest；不能用原版二进制冒充已接入。
   official_driver_image: ""
   official_launcher_image: ""
   official_pipeline_root: "s3://mlpipeline/loom-official"
   native_service_account: loom-pipeline-task
   native_parallelism: 4
-  # 下列旧 native_* 资源/存储字段只为读取旧配置保留，不用于官方引擎就绪判定。
+  # CPU/memory 字段为旧配置保留；存储配置仍用于官方冻结 SessionInfo。
   native_cpu: "1"
   native_memory: 1Gi
   native_artifact_endpoint: minio-service.kubeflow.svc.cluster.local:9000

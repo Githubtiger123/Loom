@@ -61,9 +61,20 @@ images:
   path: /app/configs/images.yaml
 
 pipeline:
+  # Official runtime staging policy; flags stay off until release gates pass.
+  runtime_enabled: false
+  runtime_addr: ":8444"
+  runtime_endpoint: ""
+  runtime_tls_cert: ""
+  runtime_tls_key: ""
+  runtime_ca_config_map: loom-pipeline-runtime-ca
+  official_driver_image: ""
+  official_launcher_image: ""
+  official_pipeline_root: s3://mlpipeline/loom-official
   enabled: false
   native_observer_enabled: false
   native_enabled: false
+  native_cache_enabled: false
   native_service_account: loom-pipeline-task
   native_parallelism: 4
   native_cpu: "1"

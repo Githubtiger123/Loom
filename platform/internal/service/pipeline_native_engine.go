@@ -22,7 +22,7 @@ type PipelineNativeCompatibility struct {
 }
 
 func officialRuntimeUnavailable() error {
-	return apperr.New(apperr.CodeUnavailable, "官方 Pipeline 编译框架已接入，driver/launcher 的受限 Runtime API 与数据库适配尚未完成，暂不接受原生执行")
+	return apperr.New(apperr.CodeUnavailable, "官方 Pipeline 执行未启用或运行依赖未配置，请核对官方运行时、存储、TLS 与观测器配置")
 }
 
 func nativeFinalConflict() error {
@@ -41,8 +41,9 @@ func (s *Service) officialCompileRequest(version dto.PipelineVersionSpec, values
 	p := s.PipelineConfig
 	root := strings.TrimRight(p.OfficialPipelineRoot, "/") + fmt.Sprintf("/%d/%s/%s", identity.GroupID, identity.NamespaceUID, identity.InstanceID)
 	return kfpengine.Request{PipelineIR: canonical, Parameters: parameters, Identity: identity, Options: kfpengine.Options{
+		RuntimeEndpoint: p.RuntimeEndpoint, RuntimeCAConfigMap: p.RuntimeCAConfigMap,
 		DriverImage: p.OfficialDriverImage, LauncherImage: p.OfficialLauncherImage, ServiceAccount: p.NativeServiceAccount,
-		PipelineRoot: root, Parallelism: p.NativeParallelism, CacheDisabled: true,
+		PipelineRoot: root, Parallelism: p.NativeParallelism, CacheDisabled: !p.NativeCacheEnabled,
 	}}, nil
 }
 
@@ -76,10 +77,17 @@ func (s *Service) PipelineVersionNativeCompatibility(ctx context.Context, actor,
 			report.Issues = append(report.Issues, kfpengine.Issue{Code: "OFFICIAL_COMPILATION_REJECTED", Path: "/"})
 		} else {
 			report.ValidationMode, report.Compilable, report.PlanDigest = "OFFICIAL_ARGOCOMPILER", true, result.WorkflowDigest
+			report.SupportedFeatures = []string{"PYTHON_COMPONENTS", "PARAMETERS", "ARTIFACTS", "DAG", "LOOPS", "CONDITIONS", "RETRIES", "LOGS", "METRICS", "STOP"}
+			if s.PipelineConfig.NativeCacheEnabled {
+				report.SupportedFeatures = append(report.SupportedFeatures, "CACHE")
+			}
 		}
 	}
 	// Runtime capabilities are not inferred from successful YAML generation.
-	report.Runnable = false
+	report.Runnable = report.Compilable && len(report.Issues) == 0 && s.PipelineConfig.NativeEnabled && s.OfficialPipelineBackend != nil && s.OfficialPipelineBackend.Ready(ctx) == nil
+	if report.Runnable {
+		report.ExecutionReason = "OPERATOR_CONFIGURED_NOT_RUNTIME_VERIFIED"
+	}
 	fresh, err := s.PipelineVersion(ctx, actor, groupID, pipelineID, versionID)
 	if err != nil {
 		return nil, err
@@ -91,9 +99,18 @@ func (s *Service) PipelineVersionNativeCompatibility(ctx context.Context, actor,
 }
 
 func (s *Service) validateNativeRun(version dto.PipelineVersionSpec, values []dto.MLParameterValue) error {
-	// This initial refactor has no production runtime backend. In particular,
-	// do not accept operations and leave them queued behind a missing adapter.
-	return officialRuntimeUnavailable()
+	if !s.PipelineConfig.NativeEnabled || s.OfficialPipelineBackend == nil || s.OfficialPipelineBackend.Ready(context.Background()) != nil {
+		return officialRuntimeUnavailable()
+	}
+	request, err := s.officialCompileRequest(version, values, kfpengine.Identity{GroupID: 1, RunID: 1, InstanceID: "11111111-1111-4111-8111-111111111111", Namespace: "preflight", NamespaceUID: "22222222-2222-4222-8222-222222222222"})
+	if err != nil {
+		return err
+	}
+	_, err = kfpengine.Compile(context.Background(), request)
+	if err != nil {
+		return apperr.Wrap(apperr.CodeInvalid, "流水线无法由官方编译器生成受支持的 Workflow", err)
+	}
+	return nil
 }
 
 func (s *Service) executeNativePipelineClaim(ctx context.Context, claim *MLExecutionClaim) error {
@@ -118,11 +135,21 @@ func (s *Service) executeNativePipelineClaim(ctx context.Context, claim *MLExecu
 
 // Historical native execution is not reinterpreted with a different compiler.
 // Business data remains readable; live stop/cleanup/resume needs its engine.
-func nativeLifecycleAllowed(ctx context.Context, st *repository.Store, run *model.PipelineRun, action MLAction) error {
+func (s *Service) nativeLifecycleAllowed(ctx context.Context, st *repository.Store, run *model.PipelineRun, action MLAction) error {
 	if run.Engine != model.PipelineEngineNativeArgo {
 		return nil
 	}
-	return officialRuntimeUnavailable()
+	if !s.PipelineConfig.NativeEnabled || s.OfficialPipelineBackend == nil {
+		return officialRuntimeUnavailable()
+	}
+	attempt, err := st.PipelineRunAttempt(ctx, run.GroupID, run.ID, run.InstanceID, false)
+	if err != nil {
+		return domainError(err)
+	}
+	if attempt.EngineRevision == nil || *attempt.EngineRevision != kfpengine.EngineRelease {
+		return apperr.New(apperr.CodeConflict, "旧版自研运行不能由官方引擎接管生命周期，请使用原版本清理")
+	}
+	return nil
 }
 
 func (s *Service) SyncNativePipelineWorkflow(ctx context.Context, namespace, name string) error {

@@ -12,9 +12,16 @@ import (
 // Pipeline retains the KFP service client for existing runs. Official compiler
 // policy is separate from runtime readiness; a flag never installs adapters.
 type Pipeline struct {
+	RuntimeEnabled         bool     `yaml:"runtime_enabled"`
+	RuntimeAddr            string   `yaml:"runtime_addr"`
+	RuntimeEndpoint        string   `yaml:"runtime_endpoint"`
+	RuntimeTLSCert         string   `yaml:"runtime_tls_cert"`
+	RuntimeTLSKey          string   `yaml:"runtime_tls_key"`
+	RuntimeCAConfigMap     string   `yaml:"runtime_ca_config_map"`
 	Enabled                bool     `yaml:"enabled"`
 	NativeObserverEnabled  bool     `yaml:"native_observer_enabled"`
 	NativeEnabled          bool     `yaml:"native_enabled"`
+	NativeCacheEnabled     bool     `yaml:"native_cache_enabled"`
 	OfficialDriverImage    string   `yaml:"official_driver_image"`
 	OfficialLauncherImage  string   `yaml:"official_launcher_image"`
 	OfficialPipelineRoot   string   `yaml:"official_pipeline_root"`
@@ -44,14 +51,32 @@ type Pipeline struct {
 }
 
 func (p Pipeline) Validate() error {
+	if p.NativeObserverEnabled && !p.RuntimeEnabled {
+		return fmt.Errorf("官方 Pipeline 观测需同时启用独立 Runtime API，不会回退到 MLMD 或旧执行器")
+	}
+	if p.NativeCacheEnabled && !p.NativeEnabled && !p.NativeObserverEnabled {
+		return fmt.Errorf("官方 Pipeline 缓存需启用原生执行或观测，不适用于外部 KFP 后端")
+	}
+	if p.RuntimeEnabled {
+		endpoint, err := url.Parse(p.RuntimeEndpoint)
+		if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.Path != "" && endpoint.Path != "/" || endpoint.RawQuery != "" || endpoint.Fragment != "" || p.RuntimeAddr == "" || p.RuntimeTLSCert == "" || p.RuntimeTLSKey == "" || !validator.IsDNS1123Subdomain(p.RuntimeCAConfigMap) {
+			return fmt.Errorf("Pipeline runtime 需独立 TLS 地址、Pod 可达的 HTTPS origin、服务端证书/私钥和 CA ConfigMap")
+		}
+	}
 	if p.NativeEnabled {
-		if !p.NativeObserverEnabled || !validator.IsDNS1123Label(p.NativeServiceAccount) || p.NativeParallelism < 1 || p.NativeParallelism > 16 ||
+		if p.PollInterval.Std() < 5*time.Second || p.PollInterval.Std() > time.Minute {
+			return fmt.Errorf("原生 Pipeline poll_interval 须为 5–60s")
+		}
+		if !p.RuntimeEnabled || !p.NativeObserverEnabled || !validator.IsDNS1123Label(p.NativeServiceAccount) || p.NativeParallelism < 1 || p.NativeParallelism > 16 ||
 			!validator.IsDigestImageReference(p.OfficialDriverImage) || !validator.IsDigestImageReference(p.OfficialLauncherImage) {
 			return fmt.Errorf("官方 Pipeline 需启用 observer、配置执行 SA、并发 1–16，以及固定 sha256 digest 的 driver/launcher 镜像；配置有效不表示 runtime 适配已就绪")
 		}
 		root, err := url.Parse(p.OfficialPipelineRoot)
-		if err != nil || (root.Scheme != "s3" && root.Scheme != "gs" && root.Scheme != "minio") || root.Host == "" || root.User != nil || root.RawQuery != "" || root.Fragment != "" {
-			return fmt.Errorf("pipeline.official_pipeline_root 须为不含凭据的 s3/gs/minio 存储根路径")
+		if err != nil || (root.Scheme != "s3" && root.Scheme != "minio") || root.Host == "" || !validator.IsObjectURIWithin(p.OfficialPipelineRoot, strings.TrimRight(p.OfficialPipelineRoot, "/")+"/__loom_policy_probe__") {
+			return fmt.Errorf("pipeline.official_pipeline_root 当前仅支持不含凭据的 S3/MinIO 根路径，GS 存储适配尚未接入")
+		}
+		if !validator.IsDNS1123Subdomain(p.NativeArtifactSecret) || root.Host != p.NativeArtifactBucket || strings.TrimSpace(p.NativeArtifactEndpoint) == "" || strings.Contains(p.NativeArtifactEndpoint, "://") || strings.ContainsAny(p.NativeArtifactEndpoint, "/@?# ") {
+			return fmt.Errorf("官方 Pipeline 需配置同桶的 native_artifact_bucket、无 scheme/path 的 native_artifact_endpoint 及空间内凭据 Secret 名称")
 		}
 	}
 	if p.NativeObserverEnabled && (p.SyncConcurrency < 1 || p.SyncConcurrency > 16 || p.SyncQPS < 1 || p.SyncQPS > 100) {

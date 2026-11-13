@@ -192,3 +192,11 @@ func NewExecutor(api *handler.API, cfg config.Executor) http.Handler {
 	mux.HandleFunc("GET /internal/v1/ml-executions/{oid}", api.MLExecutionOperation)
 	return executor.Authenticate(cfg, mux)
 }
+
+// NewPipelineRuntime is not mounted by New or NewExecutor. The caller must use
+// its own TLS listener; workload identity is checked on every request.
+func NewPipelineRuntime(api *handler.API) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /internal/v1/pipeline-runtime/{operation}", api.PipelineRuntime)
+	return mux
+}

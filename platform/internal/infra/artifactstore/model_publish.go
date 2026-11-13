@@ -22,6 +22,8 @@ const MaxModelBytes int64 = 10 << 30
 // NativeModelSource is a server-resolved immutable transport manifest, never a
 // browser-supplied endpoint/key. Publication uses separate, prefix-limited creds.
 type NativeModelSource struct {
+	Root        string `json:"root,omitempty"`
+	URI         string `json:"uri,omitempty"`
 	Endpoint    string `json:"endpoint"`
 	Bucket      string `json:"bucket"`
 	Key         string `json:"key"`
@@ -52,6 +54,9 @@ func NewModelPublisher(source, target config.ArtifactStore) (*ModelPublisher, er
 }
 
 func (p *ModelPublisher) Publish(ctx context.Context, groupID uint64, namespaceUID, instance, operationID, fileName string, source NativeModelSource, guard func() error) (*PublishedModel, error) {
+	if source.Format == "OFFICIAL_V1" {
+		return p.publishOfficial(ctx, groupID, namespaceUID, instance, operationID, fileName, source, guard)
+	}
 	bad := func() error {
 		return apperr.New(apperr.CodeInvalid, "模型归档不安全、摘要/大小不一致或超过 10 GiB/10000 项上限")
 	}

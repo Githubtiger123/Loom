@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	kfpengine "github.com/githubtiger123/loom/engine/kfp"
+	"github.com/githubtiger123/loom/engine/kfp/runtimeapi"
+	pb "github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
+	"google.golang.org/protobuf/encoding/protojson"
 	"strconv"
 	"time"
 
@@ -92,6 +96,33 @@ func (s *Service) resolveModelImport(ctx context.Context, actor, gid uint64, in 
 	}
 	if !output {
 		return nil, apperr.New(apperr.CodeNotFound, "当前运行没有此已发布输出产物")
+	}
+	currentAttempt, err := s.Store.PipelineRunAttempt(ctx, gid, run.ID, run.InstanceID, false)
+	if err != nil {
+		return nil, err
+	}
+	if currentAttempt.EngineRevision != nil && *currentAttempt.EngineRevision == kfpengine.EngineRelease {
+		if currentAttempt.NamespaceUID == nil || currentAttempt.WorkflowArchivedAt == nil || currentAttempt.Phase == nil || *currentAttempt.Phase != "SUCCEEDED" {
+			return nil, apperr.New(apperr.CodeConflict, "请等待官方运行成功并完成产物归档后登记模型")
+		}
+		id, err := strconv.ParseInt(in.ArtifactID, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, nativeFinalConflict()
+		}
+		row, err := s.Store.RuntimeObject(ctx, runtimeapi.Scope{GroupID: gid, RunID: run.ID, InstanceID: run.InstanceID}, id, "artifact")
+		if err != nil {
+			return nil, domainError(err)
+		}
+		var record runtimeapi.ArtifactRecord
+		artifact := &pb.Artifact{}
+		var snapshot officialAttemptSnapshot
+		if json.Unmarshal(row.Value, &record) != nil || record.Name == "executor-logs" || protojson.Unmarshal(record.Artifact, artifact) != nil || artifact.GetState() != pb.Artifact_LIVE || json.Unmarshal(currentAttempt.Snapshot, &snapshot) != nil {
+			return nil, nativeFinalConflict()
+		}
+		if err = s.checkPipelineDAGRead(ctx, actor, run); err != nil {
+			return nil, err
+		}
+		return &modelImportCommand{Request: in, GroupID: gid, NamespaceUID: *currentAttempt.NamespaceUID, ProducerInstance: run.InstanceID, Source: artifactstore.NativeModelSource{Format: "OFFICIAL_V1", Root: snapshot.RuntimePolicy.PipelineRoot, URI: artifact.GetUri()}}, nil
 	}
 	row := &model.PipelineArtifact{}
 	if err := s.DB.WithContext(ctx).Where("id = ? AND group_id = ? AND state = 'PUBLISHED'", in.ArtifactID, gid).First(row).Error; err != nil {

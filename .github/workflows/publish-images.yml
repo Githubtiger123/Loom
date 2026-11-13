@@ -21,6 +21,7 @@ on:
           - all
           - development
           - production
+          - pipeline-runtime
 
 permissions:
   contents: read
@@ -79,8 +80,10 @@ jobs:
             {component: "platform", variant: "development", image: "loom-platform-dev", dockerfile: "install/docker/Dockerfile", target: "development"},
             {component: "web", variant: "development", image: "loom-web-dev", dockerfile: "install/docker/dockerFrontend/Dockerfile", target: "development"},
             {component: "platform", variant: "production", image: "loom-platform", dockerfile: "install/docker/Dockerfile", target: "runtime"},
-            {component: "web", variant: "production", image: "loom-web", dockerfile: "install/docker/dockerFrontend/Dockerfile", target: "runtime"}
-          ] | map(select($selection == "all" or .variant == $selection)))}')"
+            {component: "web", variant: "production", image: "loom-web", dockerfile: "install/docker/dockerFrontend/Dockerfile", target: "runtime"},
+            {component: "driver", variant: "pipeline-runtime", image: "loom-kfp-driver", dockerfile: "install/docker/Dockerfile.kfp-runtime", target: "driver"},
+            {component: "launcher", variant: "pipeline-runtime", image: "loom-kfp-launcher", dockerfile: "install/docker/Dockerfile.kfp-runtime", target: "launcher"}
+          ] | map(select($selection == "all" or .variant == $selection or ($selection == "production" and .variant == "pipeline-runtime"))))}')"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           {

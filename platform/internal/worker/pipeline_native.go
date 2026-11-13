@@ -85,7 +85,7 @@ func (r *Runner) runNativePipelineObserver(ctx context.Context) error {
 			}
 		}()
 	}
-	r.Log.Info("原生 Workflow Informer 观测已启动，未启用原生提交", "cluster", r.Cluster)
+	r.Log.Info("官方 Workflow Informer 观测已启动", "cluster", r.Cluster, "submissionEnabled", r.Service.PipelineConfig.NativeEnabled)
 	<-ctx.Done()
 	queue.ShutDown()
 	workers.Wait()

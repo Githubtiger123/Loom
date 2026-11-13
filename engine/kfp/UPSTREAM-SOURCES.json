@@ -1,0 +1,166 @@
+{
+  "repository": "https://github.com/kubeflow/pipelines",
+  "revision": "555bfa60a70da88c594960bdacfd78fa7c061043",
+  "license": "Apache-2.0",
+  "hashNormalization": "SHA-256 of full upstream UTF-8 file with CRLF replaced by LF; no other whitespace or trailing newline changes.",
+  "sources": [
+    {
+      "upstream": "backend/src/v2/driver/cache.go",
+      "local": "internal/upstreamdriver/cache.go",
+      "sha256": "5b88993c577d416d8abe076b541cb756009c0bc168452e04a4748efc91e80878",
+      "patches": [
+        "replace concrete metadata client with injected MetadataClient",
+        "do not reuse executor-logs artifacts on a cache hit; they describe a physical Pod"
+      ]
+    },
+    {
+      "upstream": "backend/src/v2/driver/container.go",
+      "local": "internal/upstreamdriver/container.go",
+      "sha256": "387e92352587c1b7a316caca5f65670eb4da5833db05aca6d161c22ada5bd36f",
+      "patches": [
+        "replace concrete metadata client with injected MetadataClient",
+        "omit full options debug dump"
+      ]
+    },
+    {
+      "upstream": "backend/src/v2/driver/dag.go",
+      "local": "internal/upstreamdriver/dag.go",
+      "sha256": "0f2b3a3799bca4e908a385731287dc084547b66894fe84a687f0b6f2792041c3",
+      "patches": [
+        "replace concrete metadata client with injected MetadataClient",
+        "omit full options and execution-config debug dumps"
+      ]
+    },
+    {
+      "upstream": "backend/src/v2/driver/driver.go",
+      "local": "internal/upstreamdriver/driver.go",
+      "sha256": "884d87d4ba8f3246b55d3523c30c3ce18d21c93ff2d301fb7ed4d893a27ae0fa",
+      "patches": ["rewrite metadata/component imports to retained local upstream packages"]
+    },
+    {
+      "upstream": "backend/src/v2/driver/k8s.go",
+      "local": "internal/upstreamdriver/k8s.go",
+      "sha256": "eca2c1ded4b9af61b6599acaac05cd7ba74982c0465a8f9363d2c6c171ccde15",
+      "patches": [
+        "replace concrete metadata client with injected MetadataClient"
+      ]
+    },
+    {
+      "upstream": "backend/src/v2/driver/resolve.go",
+      "local": "internal/upstreamdriver/resolve.go",
+      "sha256": "86a711a233faf0776dac4c51b83124f1a61cf699e1dac16e0430da3fe7907965",
+      "patches": [
+        "replace concrete metadata client with injected MetadataClient",
+        "omit full input-resolution debug payloads"
+      ]
+    },
+    {
+      "upstream": "backend/src/v2/driver/root_dag.go",
+      "local": "internal/upstreamdriver/root_dag.go",
+      "sha256": "215d977861c9d020932288c4def1b762c03c931caea6809ad41966a6f3390917",
+      "patches": [
+        "inject MetadataClient and StoreConfig",
+        "remove implicit Kubernetes/config-map loading",
+        "omit full options/execution protobuf debug payloads"
+      ]
+    },
+    {
+      "upstream": "backend/src/v2/driver/util.go",
+      "local": "internal/upstreamdriver/util.go",
+      "sha256": "fed351983f0f07b79be2a03bc43ac32bbd7eebd24334d73ffc5331d37916679e",
+      "patches": []
+    },
+    {
+      "upstream": "backend/src/v2/metadata/client.go",
+      "local": "metadata/client.go",
+      "sha256": "1caf5f16e215914ccf9eeb382b6e33b4d131bafe41537107814a8497ffff7406",
+      "patches": ["retain official types/private context fields; remove NewTestClient test helper", "runtime uses runtimeclient.Metadata, never this RPC constructor"]
+    },
+    {
+      "upstream": "backend/src/v2/metadata/converter.go",
+      "local": "metadata/converter.go",
+      "sha256": "9a1e25c248b4fb2fb667b0ece179b4745d89ad2befa4e5890c6ab997bb30ad97",
+      "patches": ["retain official conversion bodies; exported wrappers live in codec.go"]
+    },
+    {
+      "upstream": "backend/src/v2/metadata/model.go",
+      "local": "metadata/model.go",
+      "sha256": "96e2c56a3aa29cccf4f0b05f73e6f13be080ce6ed638cf22d593c941e48fff0a",
+      "patches": ["retain official model types"]
+    },
+    {
+      "upstream": "backend/src/v2/component/launcher_v2.go",
+      "local": "internal/upstreamcomponent/launcher_v2.go",
+      "sha256": "568f29a2a2ff2ee8da458b7198bd3c5a3477b3ac0c54a2903215667ad7075393",
+      "patches": ["rewrite metadata and client manager imports", "inject official NoOpDispatcher", "return early when DAG/context lookup fails", "skip user command and deferred publication on committed publication replay"]
+    },
+    {
+      "upstream": "backend/src/v2/component/util.go",
+      "local": "internal/upstreamcomponent/util.go",
+      "sha256": "9c044bfec14cad487f1e2038ec53a6edad57d037e68a184b4d20c838d79f7c16",
+      "patches": ["rewrite metadata imports"]
+    },
+    {
+      "upstream": "backend/src/v2/component/constants.go",
+      "local": "internal/upstreamcomponent/constants.go",
+      "sha256": "d6d6ca81347f0ed6370a1f42f47186ae722c4f71ee5ffda3dcf08937ee70ea2f",
+      "patches": ["retain upstream constants"]
+    },
+    {
+      "upstream": "backend/src/v2/cmd/driver/main.go",
+      "local": "cmd/driver/main.go",
+      "sha256": "55b98bdd89cec8799cabdc69776803718efe5c3cd780ee33484856a2db033773",
+      "patches": ["preserve official flags/output files; inject scoped Runtime API clients and frozen store", "reject importer/platform entry points", "remove full IR/options debug dumps"]
+    },
+    {
+      "upstream": "backend/src/v2/cmd/launcher-v2/main.go",
+      "local": "cmd/launcher-v2/main.go",
+      "sha256": "d826728ad16699abc63b0e3e46c93653f0406dd82b9a0e5c120eec5b101b0148",
+      "patches": ["preserve official flags and copy mode; inject scoped Runtime API client manager", "reject importer", "remove full executor/component debug dumps"]
+    }
+  ],
+  "extractions": [
+    {
+      "upstream": "backend/src/v2/cacheutils/cache.go",
+      "local": "internal/upstreamcache/key.go",
+      "sha256": "0c49447d29697066c2b64db582fd17ccf96af04c90853962c0dc93d4379f19bc",
+      "functions": [
+        "(*client).GenerateFingerPrint",
+        "(*client).GenerateCacheKey"
+      ],
+      "patches": [
+        "remove unused receiver and unrelated RPC code/imports",
+        "add provenance comment; preserve algorithm bodies"
+      ]
+    },
+    {
+      "upstream": "backend/src/v2/metadata/client.go",
+      "local": "metadata/build.go",
+      "sha256": "1caf5f16e215914ccf9eeb382b6e33b4d131bafe41537107814a8497ffff7406",
+      "functions": ["(*Client).CreateExecution config-to-protobuf conversion"],
+      "patches": ["extract conversion without RPC writes", "require caller-provided positive type ID", "redact payload debug dumps"]
+    },
+    {
+      "upstream": "backend/src/v2/metadata/client.go",
+      "local": "metadata/dag.go",
+      "sha256": "1caf5f16e215914ccf9eeb382b6e33b4d131bafe41537107814a8497ffff7406",
+      "functions": ["(*Client).GetExecutionsInDAG indexing", "(*Client).UpdateDAGExecutionsState aggregation"],
+      "patches": ["inject ClientInterface for reads/state writes", "retain upstream indexing and aggregation", "redact payload debug dumps"]
+    }
+  ],
+  "localAdditions": [
+    "driver.go",
+    "metadata/codec.go",
+    "internal/runtimeclients/clients.go",
+    "runtime_policy.go",
+    "lifecycle.go",
+    "internal/upstreamdriver/dependencies.go",
+    "runtimeapi/",
+    "runtimeclient/"
+  ],
+  "notes": [
+    "Modified upstream driver files carry a Loom modification notice.",
+    "Use gofmt for formatting; source hashes describe upstream inputs, not patched local files.",
+    "No end-to-end compatibility or runtime validation has been performed."
+  ]
+}

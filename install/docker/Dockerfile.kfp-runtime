@@ -1,0 +1,22 @@
+FROM golang:1.27.3-alpine AS build
+WORKDIR /workspace/engine/kfp
+COPY engine/kfp/ ./
+RUN go mod download
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/driver ./cmd/driver
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w" -o /out/launcher-v2 ./cmd/launcher-v2
+
+FROM gcr.io/distroless/static-debian12:nonroot AS driver
+COPY --from=build /out/driver /bin/driver
+ENV PATH="/bin:/usr/bin"
+USER nonroot:nonroot
+ENTRYPOINT ["/bin/driver"]
+
+# The init container copies this static binary into the user component image;
+# the launcher image itself does not contain or execute user Python.
+FROM gcr.io/distroless/static-debian12:nonroot AS launcher
+COPY --from=build /out/launcher-v2 /bin/launcher-v2
+ENV PATH="/bin:/usr/bin"
+USER nonroot:nonroot
+ENTRYPOINT ["/bin/launcher-v2"]

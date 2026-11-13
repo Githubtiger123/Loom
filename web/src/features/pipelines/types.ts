@@ -70,6 +70,13 @@ export type Definition = {
   parameterIterator?: unknown;
 };
 export type NodeInstance = {
+  retries?: {
+    epoch: number;
+    podName: string;
+    podUID: string;
+    state: string;
+    publicationReplayed: boolean;
+  }[];
   nodeId: string;
   definitionNodeId?: string;
   mapping: string;

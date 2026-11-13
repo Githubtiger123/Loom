@@ -1,0 +1,33 @@
+# Merge into config.local.yaml. Not a Kubernetes resource.
+# Source example only: defaults disabled, no deployment/runtime verification.
+pipeline:
+  native_enabled: false
+  native_cache_enabled: false
+  native_observer_enabled: false
+  runtime_enabled: false
+  runtime_addr: ":8444"
+  runtime_endpoint: https://loom-pipeline-runtime.loom-system.svc:8444
+  runtime_tls_cert: /var/run/secrets/loom-runtime-server/tls.crt
+  runtime_tls_key: /var/run/secrets/loom-runtime-server/tls.key
+  runtime_ca_config_map: loom-pipeline-runtime-ca
+  # Real CI runtime image outputs, not upstream unmodified binaries.
+  official_driver_image: ""
+  official_launcher_image: ""
+  official_pipeline_root: s3://mlpipeline/loom-official
+  native_service_account: loom-pipeline-task
+  native_artifact_endpoint: minio-service.kubeflow.svc.cluster.local:9000
+  native_artifact_bucket: mlpipeline
+  native_artifact_region: us-east-1
+  native_artifact_secret: loom-native-artifacts
+  native_artifact_insecure: true
+  native_parallelism: 4
+  poll_interval: 15s
+  sync_concurrency: 2
+  sync_qps: 10
+
+# artifact_store uses separate backend read-only credentials. Its fixed endpoint
+# and bucket must match the writer policy, and its prefix must cover loom-official.
+# Never use the component writer's credentials or MinIO root credentials here.
+# Cache opt-in additionally requires separate artifact_store.cache_copy_access_key
+# and cache_copy_secret_key: source GetObject plus PutObject only under the
+# configured root's */__cache/* destinations. The read-only account stays read-only.

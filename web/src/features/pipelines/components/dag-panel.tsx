@@ -305,6 +305,20 @@ function NodePanel({ groupId, run, node }: { groupId: string; run: Run; node: st
             {detail.instance?.error !== undefined && (
               <pre className="pipeline-code">{JSON.stringify(detail.instance.error, null, 2)}</pre>
             )}
+            {!!detail.instance?.retries?.length && (
+              <details>
+                <summary>历史重试 Pod（{detail.instance.retries.length}）</summary>
+                <ul>
+                  {detail.instance.retries.map((attempt) => (
+                    <li key={attempt.podUID} className="break-word">
+                      #{attempt.epoch + 1} · {attempt.podName} · {attempt.state}
+                      {attempt.publicationReplayed ? ' · 复用已提交结果，未重复运行组件' : ''}
+                    </li>
+                  ))}
+                </ul>
+                <p className="muted small">已发布的历史 Pod 日志可在离线日志面板查看。</p>
+              </details>
+            )}
             <div className="pipeline-columns">
               <NodeIOPanel title="输入" io={detail.inputs} groupId={groupId} run={run} />
               <NodeIOPanel title="输出" io={detail.outputs} groupId={groupId} run={run} />

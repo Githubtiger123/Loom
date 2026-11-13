@@ -42,6 +42,26 @@ func Compile(ctx context.Context, request Request) (*Result, error) {
 	if len(spec.GetRoot().GetSinglePlatformSpecs()) != 0 {
 		return nil, fmt.Errorf("root platform extensions require an explicit policy adapter")
 	}
+	deployment := &pipelinespec.PipelineDeploymentConfig{}
+	if raw, err := protojson.Marshal(spec.GetDeploymentSpec()); err != nil {
+		return nil, err
+	} else if err := protojson.Unmarshal(raw, deployment); err != nil {
+		return nil, err
+	}
+	for _, executor := range deployment.GetExecutors() {
+		if executor.GetContainer() == nil {
+			return nil, fmt.Errorf("non-container executors require an explicit runtime policy adapter")
+		}
+		if err := validateContainerPolicy(executor.GetContainer()); err != nil {
+			return nil, err
+		}
+		if !request.Options.CacheDisabled {
+			parts := strings.Split(executor.GetContainer().GetImage(), "@sha256:")
+			if len(parts) != 2 || len(parts[1]) != 64 || strings.Trim(parts[1], "0123456789abcdef") != "" {
+				return nil, fmt.Errorf("cache-enabled executions require digest-pinned component images")
+			}
+		}
+	}
 	var pipelineSpec structpb.Struct
 	if err := protojson.Unmarshal(request.PipelineIR, &pipelineSpec); err != nil {
 		return nil, err
@@ -82,7 +102,7 @@ func Compile(ctx context.Context, request Request) (*Result, error) {
 	workflow.Annotations["loom.ml/instance-id"] = identity.InstanceID
 	workflow.Annotations["loom.ml/pipeline-namespace-uid"] = identity.NamespaceUID
 	workflow.Annotations["loom.ml/pipeline-compiler"] = CompilerVersion
-	workflow.Annotations["loom.ml/pipeline-engine-release"] = CompilerVersion + "+" + UpstreamRevision
+	workflow.Annotations["loom.ml/pipeline-engine-release"] = EngineRelease
 	encoded, err := json.Marshal(workflow.Spec)
 	if err != nil || len(encoded) > MaxIRBytes {
 		return nil, fmt.Errorf("compiled Workflow exceeds manifest limit")
@@ -94,11 +114,39 @@ func Compile(ctx context.Context, request Request) (*Result, error) {
 	workflow.TypeMeta = metav1.TypeMeta{APIVersion: "argoproj.io/v1alpha1", Kind: "Workflow"}
 	digest := sum(encoded)
 	workflow.Annotations["loom.ml/pipeline-plan-hash"] = digest
-	return &Result{Workflow: workflow, IRDigest: irDigest, WorkflowDigest: digest, EngineRevision: CompilerVersion + "+" + UpstreamRevision}, nil
+	result := &Result{Workflow: workflow, IRDigest: irDigest, WorkflowDigest: digest, EngineRevision: EngineRelease}
+	if request.Options.RuntimeEndpoint != "" {
+		if err := BindRuntimeTransport(result, RuntimeTransportPolicy{Endpoint: request.Options.RuntimeEndpoint, CAConfigMap: request.Options.RuntimeCAConfigMap}); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+func refreshDigest(result *Result) error {
+	raw, err := json.Marshal(result.Workflow.Spec)
+	if err != nil || len(raw) > MaxIRBytes {
+		return fmt.Errorf("transport-bound Workflow exceeds manifest limit")
+	}
+	result.WorkflowDigest = sum(raw)
+	result.Workflow.Annotations["loom.ml/pipeline-plan-hash"] = result.WorkflowDigest
+	return nil
 }
 
 func ptr[T any](value T) *T  { return &value }
 func sum(data []byte) string { return fmt.Sprintf("%x", sha256.Sum256(data)) }
+
+func validateContainerPolicy(container *pipelinespec.PipelineDeploymentConfig_PipelineContainerSpec) error {
+	if strings.HasPrefix(container.GetImage(), "argostub/") {
+		return fmt.Errorf("Kubernetes platform operations require an explicit runtime policy adapter")
+	}
+	for _, env := range container.GetEnv() {
+		if strings.HasPrefix(strings.ToUpper(env.GetName()), "LOOM_RUNTIME_") {
+			return fmt.Errorf("component environment cannot override runtime transport policy")
+		}
+	}
+	return nil
+}
 
 func validateOptions(request Request) error {
 	id, opts := request.Identity, request.Options

@@ -48,9 +48,6 @@ func (s *Service) pipelineArchiveExecution(ctx context.Context, actor, groupID, 
 		return empty, err
 	}
 	if len(attempts) != 0 {
-		if attempts[0].Engine == model.PipelineEngineNativeArgo {
-			return empty, apperr.New(apperr.CodeUnavailable, "原生归档协议正在切换至官方 launcher，历史归档需使用对应旧版本读取；不会猜测存储路径")
-		}
 		var old model.PipelineRun
 		if json.Unmarshal(attempts[0].Snapshot, &old) != nil || old.ID != id || old.GroupID != groupID || old.InstanceID != instance {
 			return empty, apperr.New(apperr.CodeConflict, "历史执行快照身份不一致")
@@ -71,6 +68,21 @@ func (s *Service) PipelineLogArchives(ctx context.Context, actor, groupID, id ui
 	e, err := s.pipelineArchiveExecution(ctx, actor, groupID, id, instance)
 	if err != nil {
 		return nil, err
+	}
+	if attempt, official, err := s.officialLogAttempt(ctx, groupID, id, e.InstanceID); err != nil {
+		return nil, err
+	} else if official {
+		m, err := s.officialLogManifest(ctx, e, attempt)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = s.pipelineArchiveExecution(ctx, actor, groupID, id, e.InstanceID); err != nil {
+			return nil, err
+		}
+		for i := range m.Entries {
+			m.Entries[i].Key = ""
+		}
+		return m, nil
 	}
 	if s.PipelineLogArchivesReader == nil {
 		return nil, apperr.New(apperr.CodeUnavailable, "离线日志归档尚未启用")
@@ -100,6 +112,18 @@ func (s *Service) PipelineLogArchiveContent(ctx context.Context, actor, groupID,
 	e, err := s.pipelineArchiveExecution(ctx, actor, groupID, id, instance)
 	if err != nil {
 		return nil, err
+	}
+	if attempt, official, err := s.officialLogAttempt(ctx, groupID, id, e.InstanceID); err != nil {
+		return nil, err
+	} else if official {
+		chunk, err := s.officialLogChunk(ctx, e, attempt, entryID, etag, offset, limit)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = s.pipelineArchiveExecution(ctx, actor, groupID, id, e.InstanceID); err != nil {
+			return nil, err
+		}
+		return chunk, nil
 	}
 	if s.PipelineLogArchivesReader == nil {
 		return nil, apperr.New(apperr.CodeUnavailable, "离线日志归档尚未启用")

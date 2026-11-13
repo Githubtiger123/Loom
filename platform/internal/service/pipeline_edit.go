@@ -165,7 +165,7 @@ func (s *Service) UpdatePipelineRun(ctx context.Context, actor, groupID, id uint
 			}
 			// 新配置先暂存，执行命令继续携带旧配置来核对并清理旧 KFP Run。
 			run := n.row.(*model.PipelineRun)
-			if err := nativeLifecycleAllowed(ctx, st, run, MLPipelineEdit); err != nil {
+			if err := s.nativeLifecycleAllowed(ctx, st, run, MLPipelineEdit); err != nil {
 				return err
 			}
 			if run.Engine == model.PipelineEngineNativeArgo {

@@ -1,0 +1,27 @@
+# Additive runtime isolation, not a replacement for the site's API policy.
+# Other policies allowing 8444 also grant ingress; review the combined policies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loom-pipeline-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: loom-api
+  policyTypes: [Ingress]
+  ingress:
+  # Keep existing public API traffic unchanged; API auth still applies.
+  - ports:
+    - protocol: TCP
+      port: 8080
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          loom.ml/pipeline-runtime-access: "true"
+      podSelector:
+        matchExpressions:
+        - key: workflows.argoproj.io/workflow
+          operator: Exists
+    ports:
+    - protocol: TCP
+      port: 8444

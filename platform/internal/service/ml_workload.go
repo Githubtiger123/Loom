@@ -509,7 +509,7 @@ func (s *Service) changeMLState(ctx context.Context, actor, groupID, id uint64, 
 				return apperr.New(apperr.CodeConflict, "作业已经结束，不可再停止；历史保持终态")
 			}
 			if target == "pipeline_run" {
-				if err := nativeLifecycleAllowed(ctx, st, n.row.(*model.PipelineRun), action); err != nil {
+				if err := s.nativeLifecycleAllowed(ctx, st, n.row.(*model.PipelineRun), action); err != nil {
 					return err
 				}
 				// 显式停止/删除替代编辑时取消未应用的新配置。

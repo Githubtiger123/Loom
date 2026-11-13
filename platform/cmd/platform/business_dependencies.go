@@ -36,6 +36,7 @@ func configureKServe(base *service.Service, cfg config.KServe) {
 
 func configurePipeline(base *service.Service, cfg config.Pipeline) {
 	base.PipelineConfig = cfg
+	base.ConfigureOfficialPipeline()
 	if cfg.Enabled {
 		base.PipelineClient = kfp.New(cfg.Endpoint, cfg.TokenFile, cfg.Timeout.Std())
 		if cfg.MetadataEndpoint != "" {

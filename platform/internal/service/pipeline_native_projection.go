@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	kfpengine "github.com/githubtiger123/loom/engine/kfp"
+	"gorm.io/gorm"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +50,13 @@ func readPersistedIO(raw json.RawMessage) (nativePersistedIO, error) {
 // stay UNRESOLVED until the official runtime projection supplies exact identity.
 func (s *Service) readNativePipelineDAG(ctx context.Context, out *pipelineDAGRead) (*pipelineDAGRead, error) {
 	n := out.run
+	attempt, err := s.Store.PipelineRunAttempt(ctx, n.GroupID, n.ID, n.InstanceID, false)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if err == nil && attempt.EngineRevision != nil && *attempt.EngineRevision == kfpengine.EngineRelease {
+		return s.readOfficialPipelineDAG(ctx, out, attempt)
+	}
 	rows := []model.PipelineTaskExecution{}
 	if err := s.DB.WithContext(ctx).Where("group_id = ? AND run_id = ? AND instance_id = ?", n.GroupID, n.ID, n.InstanceID).
 		Order("id").Limit(k8s.MaxNativeWorkflowNodes + 1).Find(&rows).Error; err != nil {
@@ -162,6 +172,12 @@ func (s *Service) nativePipelineTaskPodRef(ctx context.Context, run *model.Pipel
 	if attempt.WorkflowUID == nil || attempt.WorkflowName == nil || attempt.NamespaceUID == nil || attempt.PlanHash == nil || attempt.Namespace == nil || attempt.ClusterID == nil ||
 		*attempt.ClusterID != s.Cluster || *attempt.Namespace != run.Namespace || run.ExternalID == nil || *run.ExternalID != *attempt.WorkflowUID {
 		return empty, nativeFinalConflict()
+	}
+	if attempt.EngineRevision != nil && *attempt.EngineRevision == kfpengine.EngineRelease {
+		if id > uint64(^uint64(0)>>1) {
+			return empty, nativeFinalConflict()
+		}
+		return s.officialTaskPodRef(ctx, run, attempt, int64(id), container)
 	}
 	row := &model.PipelineTaskExecution{}
 	if err := s.DB.WithContext(ctx).Where("id = ? AND group_id = ? AND run_id = ? AND instance_id = ?", id, run.GroupID, run.ID, run.InstanceID).First(row).Error; err != nil {

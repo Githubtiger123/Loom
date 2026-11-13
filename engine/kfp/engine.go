@@ -13,6 +13,7 @@ import (
 const (
 	UpstreamRevision = "555bfa60a70da88c594960bdacfd78fa7c061043"
 	CompilerVersion  = "loom-kfp-official-v1"
+	EngineRelease    = CompilerVersion + "+" + UpstreamRevision
 	MaxIRBytes       = 512 << 10
 	MaxTasks         = 128
 	MaxDepth         = 16
@@ -52,12 +53,14 @@ type Identity struct {
 }
 
 type Options struct {
-	DriverImage    string
-	LauncherImage  string
-	ServiceAccount string
-	PipelineRoot   string
-	Parallelism    int64
-	CacheDisabled  bool
+	RuntimeEndpoint    string
+	RuntimeCAConfigMap string
+	DriverImage        string
+	LauncherImage      string
+	ServiceAccount     string
+	PipelineRoot       string
+	Parallelism        int64
+	CacheDisabled      bool
 }
 
 type Request struct {

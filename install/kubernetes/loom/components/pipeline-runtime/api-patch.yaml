@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loom-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: api
+        ports:
+        - name: runtime-tls
+          containerPort: 8444
+        volumeMounts:
+        - name: pipeline-runtime-tls
+          mountPath: /var/run/secrets/loom-runtime-server
+          readOnly: true
+      volumes:
+      - name: pipeline-runtime-tls
+        secret:
+          secretName: loom-pipeline-runtime-tls
+          defaultMode: 0444

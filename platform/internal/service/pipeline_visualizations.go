@@ -5,8 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	kfpengine "github.com/githubtiger123/loom/engine/kfp"
+	"github.com/githubtiger123/loom/engine/kfp/runtimeapi"
+	pb "github.com/kubeflow/pipelines/third_party/ml-metadata/go/ml_metadata"
+	"google.golang.org/protobuf/encoding/protojson"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/githubtiger123/loom/platform/internal/apperr"
@@ -198,9 +203,10 @@ func (s *Service) PipelineArtifactContent(ctx context.Context, actor, gid, rid u
 	}
 	var obj *artifactstore.Object
 	if scope.data.run.Engine == model.PipelineEngineNativeArgo {
-		obj, err = s.readNativeArtifactContent(ctx, scope.data.run, artifactID, limit)
+		obj, err = s.readNativeArtifactContent(ctx, scope.data.run, artifactID, suffix, limit)
 		if obj != nil {
 			archiveName := obj.Name == "artifact.tar.gz"
+			zipName := strings.HasSuffix(obj.Name, ".zip")
 			obj.Name = a.Name
 			if obj.Name == "" {
 				obj.Name = "artifact"
@@ -210,6 +216,9 @@ func (s *Service) PipelineArtifactContent(ctx context.Context, actor, gid, rid u
 					return nil, apperr.New(apperr.CodeInvalid, "目录产物请下载 tar.gz 归档")
 				}
 				obj.Name += ".tar.gz"
+			}
+			if zipName {
+				obj.Name += ".zip"
 			}
 		}
 	} else {
@@ -234,7 +243,14 @@ func (s *Service) PipelineArtifactContent(ctx context.Context, actor, gid, rid u
 	return out, nil
 }
 
-func (s *Service) readNativeArtifactContent(ctx context.Context, run *model.PipelineRun, artifactID string, limit int64) (*artifactstore.Object, error) {
+func (s *Service) readNativeArtifactContent(ctx context.Context, run *model.PipelineRun, artifactID, suffix string, limit int64) (*artifactstore.Object, error) {
+	attempt, err := s.Store.PipelineRunAttempt(ctx, run.GroupID, run.ID, run.InstanceID, false)
+	if err != nil {
+		return nil, err
+	}
+	if attempt.EngineRevision != nil && *attempt.EngineRevision == kfpengine.EngineRelease {
+		return s.readOfficialArtifactContent(ctx, run, attempt, artifactID, suffix, limit)
+	}
 	reader, ok := s.PipelineArtifacts.(NativePipelineArtifactReader)
 	if !ok {
 		return nil, apperr.New(apperr.CodeUnavailable, "原生产物存储读取尚未配置")
@@ -301,4 +317,59 @@ func (s *Service) readNativeArtifactContent(ctx context.Context, run *model.Pipe
 		}
 	}
 	return obj, nil
+}
+
+func (s *Service) readOfficialArtifactContent(ctx context.Context, run *model.PipelineRun, attempt *model.PipelineRunAttempt, artifactID, suffix string, limit int64) (*artifactstore.Object, error) {
+	reader, ok := s.PipelineArtifacts.(interface {
+		ReadOfficial(context.Context, string, string, string, int64) (*artifactstore.Object, error)
+	})
+	if !ok {
+		return nil, apperr.New(apperr.CodeUnavailable, "官方运行产物读取尚未配置")
+	}
+	id, err := strconv.ParseInt(artifactID, 10, 64)
+	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != artifactID {
+		return nil, nativeFinalConflict()
+	}
+	scope := runtimeapi.Scope{GroupID: run.GroupID, RunID: run.ID, InstanceID: run.InstanceID}
+	row, err := s.Store.RuntimeObject(ctx, scope, id, "artifact")
+	if err != nil {
+		return nil, domainError(err)
+	}
+	var artifact runtimeapi.ArtifactRecord
+	parsed := &pb.Artifact{}
+	if json.Unmarshal(row.Value, &artifact) != nil || protojson.Unmarshal(artifact.Artifact, parsed) != nil || parsed.GetId() != id {
+		return nil, nativeFinalConflict()
+	}
+	producer, err := s.Store.RuntimeObject(ctx, scope, row.ParentID, "execution")
+	if err != nil {
+		return nil, err
+	}
+	var execution runtimeExecution
+	if json.Unmarshal(producer.Value, &execution) != nil || !execution.Published {
+		return nil, nativeFinalConflict()
+	}
+	member := false
+	for _, output := range execution.Outputs {
+		published := &pb.Artifact{}
+		if protojson.Unmarshal(output.Artifact, published) != nil {
+			return nil, nativeFinalConflict()
+		}
+		if published.GetId() == id {
+			member = true
+		}
+	}
+	var frozen struct {
+		RuntimePolicy runtimeapi.FrozenPolicy `json:"runtimePolicy"`
+	}
+	if !member || json.Unmarshal(attempt.Snapshot, &frozen) != nil || frozen.RuntimePolicy.Protocol != runtimeapi.Protocol || !validator.IsObjectURIWithin(frozen.RuntimePolicy.PipelineRoot, parsed.GetUri()) {
+		return nil, nativeFinalConflict()
+	}
+	if suffix == "" && limit == artifactstore.MaxDownloadBytes {
+		if directoryReader, ok := s.PipelineArtifacts.(interface {
+			DownloadOfficial(context.Context, string, string, int64) (*artifactstore.Object, error)
+		}); ok {
+			return directoryReader.DownloadOfficial(ctx, frozen.RuntimePolicy.PipelineRoot, parsed.GetUri(), limit)
+		}
+	}
+	return reader.ReadOfficial(ctx, frozen.RuntimePolicy.PipelineRoot, parsed.GetUri(), suffix, limit)
 }
