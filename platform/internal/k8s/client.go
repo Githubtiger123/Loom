@@ -67,12 +67,13 @@ func (c Config) withDefaults() Config {
 
 // Client 封装平台需要的三类客户端。
 type Client struct {
-	cfg     Config
-	kube    kubernetes.Interface
-	dyn     dynamic.Interface
-	logs    *podlog.Reader
-	exec    *podexec.Reader
-	predict kubernetes.Interface
+	cfg         Config
+	kube        kubernetes.Interface
+	dyn         dynamic.Interface
+	informerDyn dynamic.Interface
+	logs        *podlog.Reader
+	exec        *podexec.Reader
+	predict     kubernetes.Interface
 }
 
 // New 用给定 rest.Config 构造客户端（本地开发用 kubeconfig）。
@@ -84,6 +85,14 @@ func New(restCfg *rest.Config, cfg Config) (*Client, error) {
 	dyn, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
 		return nil, fmt.Errorf("build dynamic client: %w", err)
+	}
+	// Ordinary requests retain their deadline; LIST/WATCH uses context-driven
+	// cancellation instead of reconnecting at the short global REST timeout.
+	informerConfig := rest.CopyConfig(restCfg)
+	informerConfig.Timeout = 0
+	informerDyn, err := dynamic.NewForConfig(informerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("build informer client: %w", err)
 	}
 	// 普通 API 保留短超时；follow 日志不能被普通客户端的 10 秒总超时截断。
 	logConfig := rest.CopyConfig(restCfg)
@@ -103,7 +112,7 @@ func New(restCfg *rest.Config, cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build prediction client: %w", err)
 	}
-	return &Client{cfg: cfg.withDefaults(), kube: kube, dyn: dyn, logs: podlog.New(logClient), exec: podexec.New(kube, restCfg), predict: predictClient}, nil
+	return &Client{cfg: cfg.withDefaults(), kube: kube, dyn: dyn, informerDyn: informerDyn, logs: podlog.New(logClient), exec: podexec.New(kube, restCfg), predict: predictClient}, nil
 }
 
 // NewInCluster 使用 Pod 内的 ServiceAccount。

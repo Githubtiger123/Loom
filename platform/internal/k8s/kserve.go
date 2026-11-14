@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
 )
 
 var KServeGVR = schema.GroupVersionResource{Group: "serving.kserve.io", Version: "v1beta1", Resource: "inferenceservices"}
@@ -237,12 +236,6 @@ func (c *Client) ObserveKServe(ctx context.Context, ref KServeRef) (*KServeObser
 		return &KServeObservation{ID: ref.ID, GroupID: ref.GroupID, InstanceID: ref.InstanceID, Namespace: ref.Namespace, Name: ref.Name, UID: ref.UID, Revision: ref.Revision, State: "STOPPED", Absent: true}, nil
 	}
 	return c.observeKServeStandard(ctx, n)
-}
-
-func (c *Client) WatchKServe(ctx context.Context, resourceVersion string) (watch.Interface, error) {
-	return c.dyn.Resource(KServeGVR).Namespace("").Watch(ctx, metav1.ListOptions{
-		LabelSelector: labelManagedBy + "=" + managedByLoom, ResourceVersion: resourceVersion, AllowWatchBookmarks: true,
-	})
 }
 
 func ObserveKServeObject(n *unstructured.Unstructured) *KServeObservation {

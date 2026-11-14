@@ -38,16 +38,19 @@ STOPPED 服务再次发布时允许创建同名新 CR，并绑定新的 Kubernet
 
 ## 状态同步
 
-`kserve-worker` 同时运行两条只读观测链：
+`kserve-worker` 使用统一 [Informer + WorkQueue](resource-observation.md)，并保留持久租约对账：
 
-- Kubernetes Watch 监听 Loom 管理的 InferenceService，按 service ID、group ID、instance、namespace、name、revision 和 UID 全部匹配后即时写回。
-- GORM 持久同步租约定期 GET，修复 Watch 断线、过期 resourceVersion、进程重启和漏事件。多副本通过 `SKIP LOCKED` 与 lease 避免重复集中读取，并受 `sync_concurrency`、`sync_qps` 限制。
+- 统一 Informer observer 监听 Loom 管理的 InferenceService，以及 Deployment、ReplicaSet、Pod。下层资源不依赖 Loom 标签传播，事件（包括删除 tombstone）只按 namespace 入队；处理 namespace 键时按 ID 游标分页查询本集群已登记、启用同步且已绑定 UID 的 SERVING 服务，每页最多 100 条，分别投递 service ID 键。同 namespace 多服务各自排队，不在一个 namespace 同步回调中串行执行实时 GET。
+- 每个 service ID 键重新领取该服务的持久同步租约，再实时 `ObserveKServe`；复用现有业务身份、UID、applied revision 和 Deployment rollout 核验及写回路径，不信任事件携带的状态。删除事件绝不能直接写 absent，只有当前数据库绑定身份的实时 GET 确认 NotFound 才能标记 `RESOURCE_NOT_FOUND`。写回前再次核对 instance、租约 owner、业务 revision、applied revision 和绑定 UID，丢弃过时观测。
+- 原 `SyncNextKServe` 持久租约周期对账保持运行，修复断线、重启、漏事件及被执行操作/其他同步租约暂时跳过的通知；多副本通过 `SKIP LOCKED` 与 lease 避免对同一服务并行读取。Observer 的初始/周期 sweep 也按每页 100 条投递数据库服务 ID，覆盖 CR 已不存在的登记服务。
 
-MySQL 投影包括 generation、observedGeneration、resourceVersion、Ready、公开 URL、集群 address、清洗后的 reason、同步时间和失败次数。URL 只接受无 userinfo 的 HTTP(S)；错误只保存限长摘要，不落完整 CR、PodSpec、日志或凭据。Watch 不创建业务身份、不绑定新 UID、不改变 desired state；发布/停止/删除的完成仍由持久操作执行链确认。
+周期对账继续受 `sync_concurrency`、`sync_qps` 限制；observer 固定单 worker，队列处理另受 `sync_qps` 限制，二者不是共享限速器。两条链共用每服务租约，不增设 namespace 内并行 goroutine。连接池 `max_open` 至少为 `2 × 执行并发 + sync_concurrency + 1（observer）+ 1（sweep）+ 2`：执行器持有目标锁专用连接时仍需业务查询连接。Informer 生命周期、缓存同步、重连和队列关闭交由统一 observer 管理；observer 异常退出会取消并等待其他 KServe worker，不留下后台协程。
+
+MySQL 投影包括 generation、observedGeneration、resourceVersion、Ready、公开 URL、集群 address、清洗后的 reason、同步时间和失败次数。URL 只接受无 userinfo 的 HTTP(S)；错误只保存限长摘要，不落完整 CR、PodSpec、日志或凭据。Informer 通知不创建业务身份、不绑定新 UID、不改变 desired state；发布/停止/删除的完成仍由持久操作执行链确认。
 
 ## 部署要求
 
-先显式执行 `000020_kserve.sql`，同步升级 API 和 kserve-worker，再设置 `kserve.enabled=true`。worker 的 Kubernetes 身份至少需要跨目标 namespace 对 `serving.kserve.io/v1beta1/inferenceservices` 的 get/list/watch/create/update/delete 权限，以及现有空间身份核验所需只读权限。切换前必须停止旧 KServe 外部适配器，避免两个执行端竞争同一操作或 CR。
+先显式执行 `000020_kserve.sql`，同步升级 API 和 kserve-worker，再设置 `kserve.enabled=true`。worker 的 Kubernetes 身份至少需要跨目标 namespace 对 `serving.kserve.io/v1beta1/inferenceservices` 的 get/list/watch/create/update/delete 权限，对 `apps/v1/deployments`、`apps/v1/replicasets`、`v1/pods` 的 get/list/watch 权限，以及现有空间身份核验所需只读权限；下层 Informer 使用空 selector，不要求继承 Loom 标签。切换前必须停止旧 KServe 外部适配器，避免两个执行端竞争同一操作或 CR。
 
 ## 官方复用与本次后端补全
 

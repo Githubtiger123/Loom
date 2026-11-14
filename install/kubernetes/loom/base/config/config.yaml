@@ -68,8 +68,8 @@ pipeline:
   runtime_tls_cert: ""
   runtime_tls_key: ""
   runtime_ca_config_map: loom-pipeline-runtime-ca
-  official_driver_image: ""
-  official_launcher_image: ""
+  official_driver_image: "crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/loom-kfp-driver:261113154000@sha256:eaae98f6269814df6dcaa25e5eb990b1a66b2a68131124f6508e0dda529ff84e"
+  official_launcher_image: "crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/loom-kfp-launcher:261113154000@sha256:a7958ac423b8e088308270f783017975faa6f28de9ffdf2ae5073d030c2f5da3"
   official_pipeline_root: s3://mlpipeline/loom-official
   enabled: false
   native_observer_enabled: false

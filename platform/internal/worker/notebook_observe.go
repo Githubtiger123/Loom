@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/githubtiger123/loom/platform/internal/k8s"
@@ -12,34 +13,25 @@ import (
 	"gorm.io/gorm"
 )
 
-// GET 轮询不创建/修复资源；目标锁防止较早观测跨过执行结果回填。
-func (r *Runner) runNotebookObserver(ctx context.Context) {
+// Low-frequency sweep only enqueues durable business IDs, including resources
+// deleted while the observer was down. It does not read Kubernetes objects.
+func (r *Runner) enqueueObservedNotebooks(ctx context.Context, namespace string, enqueue func(string)) error {
 	var after uint64
-	for ctx.Err() == nil {
-		var rows []model.Notebook
-		err := r.DB.WithContext(ctx).Where("cluster = ? AND id > ? AND deleted_at IS NULL", r.Cluster, after).Order("id").Limit(50).Find(&rows).Error
-		if err != nil {
-			r.Log.Warn("读取 Notebook 观测目标失败", "err", err)
-			if !pause(ctx, 5*time.Second) {
-				return
-			}
-			continue
+	for {
+		var ids []uint64
+		query := r.DB.WithContext(ctx).Model(&model.Notebook{}).Where("cluster = ? AND id > ? AND deleted_at IS NULL", r.Cluster, after)
+		if namespace != "" {
+			query = query.Where("namespace = ?", namespace)
 		}
-		if len(rows) == 0 {
-			after = 0
-			if !pause(ctx, 20*time.Second) {
-				return
-			}
-			continue
+		if err := query.Order("id").Limit(100).Pluck("id", &ids).Error; err != nil {
+			return err
 		}
-		for _, n := range rows {
-			after = n.ID
-			workCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-			err := r.observeNotebook(workCtx, n.ID, n.GroupID)
-			cancel()
-			if err != nil && !errors.Is(err, repository.ErrLeaseLost) && ctx.Err() == nil {
-				r.Log.Warn("Notebook 观测失败", "notebook", n.ID, "err", err)
-			}
+		if len(ids) == 0 {
+			return nil
+		}
+		for _, id := range ids {
+			enqueue("notebook-id/" + strconv.FormatUint(id, 10))
+			after = id
 		}
 	}
 }
@@ -79,7 +71,7 @@ func (r *Runner) observeNotebook(ctx context.Context, id, groupID uint64) error 
 	if err := repository.CheckTargetLock(ctx, lock); err != nil {
 		return err
 	}
-	return repository.InTx(ctx, r.DB, func(tx *repository.Store) error {
+	writeErr := repository.InTx(ctx, r.DB, func(tx *repository.Store) error {
 		if err := tx.LockAuthorization(ctx); err != nil {
 			return err
 		}
@@ -146,4 +138,8 @@ func (r *Runner) observeNotebook(ctx context.Context, id, groupID uint64) error 
 		}
 		return tx.UpdateNotebook(ctx, groupID, id, fields)
 	})
+	if writeErr != nil {
+		return writeErr
+	}
+	return observeErr
 }

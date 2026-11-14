@@ -1,6 +1,6 @@
 # Notebook 业务接口
 
-当前源码已包含业务 API、权限、MySQL 持久操作与审计，以及 Notebook 执行器、GET 轮询观测、事件/日志/诊断/用量查询。worker 会消费 `notebook.create/start/stop/update/delete`，复用已有映射器和社区 notebook-controller，不新增 controller 部署。
+当前源码已包含业务 API、权限、MySQL 持久操作与审计，以及 Notebook 执行器、Informer + WorkQueue 观测、事件/日志/诊断/用量查询。worker 会消费 `notebook.create/start/stop/update/delete`，复用已有映射器和社区 notebook-controller，不新增 controller 部署。统一监听与部署权限见 [资源状态观测](resource-observation.md)。
 
 这不代表集群已可用：命令行入口已从独立 `configs/images.yaml` 加载可信镜像目录并注入 API/worker，创建时固定实际地址和类型，详见 [镜像配置](notebook-images.md)。未验证仓库拉取、镜像运行兼容性或网关部署，不回退到用户镜像地址或任意 PodSpec。停止、删除不依赖镜像解析。没有可信 kernel 活动源，当前不自动 idle 回收。
 
@@ -175,7 +175,7 @@ operationId 必须指向本实例当前最后一张失败操作单，目标版�
 
 ## 8. 状态和访问
 
-状态包含 desiredState、observedState、status、revision、appliedRevision、operationId、observedAt 等。数据库保存执行层观测投影；`sync` 的 `RunObserver` 包含 Notebook GET 轮询，周期性维护检查观测时效，不增加 watch 依赖。对象丢失、UID/实例冲突、运行漂移会明确回填；网络失败不冒充对象丢失，也不推进成功观测时间。超过两分钟标记 `STALE / UNKNOWN`；失败操作的 FAILED 投影不会仅因资源恢复而被观测器掩盖。
+状态包含 desiredState、observedState、status、revision、appliedRevision、operationId、observedAt 等。数据库保存执行层观测投影；`sync` 的 `RunObserver` 使用统一 Informer + WorkQueue，监听 Notebook 及相关 StatefulSet/Pod/Service/PVC、空间和配额变化；事件映射到登记 ID 后复用实时归属校验写回。每分钟数据库投递兜底对账，定时维护仍检查观测时效。对象丢失、UID/实例冲突、运行漂移会明确回填；网络失败不冒充对象丢失，也不推进成功观测时间。超过两分钟标记 `STALE / UNKNOWN`；失败操作的 FAILED 投影不会仅因资源恢复而被观测器掩盖。
 
 访问接口需要 notebook.connect，且空间 ACTIVE、实例期望/观测/状态均 RUNNING、revision 已应用、有 UID 和最近两分钟内观测。普通用户还需原生空间授权 READY、期望/观测等级一致、访问版本已应用且观测未过期；固定基础设施 Owner 使用其原生空间权限，但仍需业务权限。否则返回 `ready=false` 与原因，不伪造 URL。
 

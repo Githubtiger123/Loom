@@ -107,9 +107,9 @@ pipeline:
   runtime_tls_cert: ""
   runtime_tls_key: ""
   runtime_ca_config_map: loom-pipeline-runtime-ca
-  # 待发布接入 Loom Runtime API 的运行时后，配置实际镜像@sha256:digest；不能用原版二进制冒充已接入。
-  official_driver_image: ""
-  official_launcher_image: ""
+  # Loom Runtime API 配套镜像：261113154000，固定仓库摘要；发布不代表已完成集群验收。
+  official_driver_image: "crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/loom-kfp-driver:261113154000@sha256:eaae98f6269814df6dcaa25e5eb990b1a66b2a68131124f6508e0dda529ff84e"
+  official_launcher_image: "crpi-mctg1j954m4bry6c.cn-qingdao.personal.cr.aliyuncs.com/tiger-dev/loom-kfp-launcher:261113154000@sha256:a7958ac423b8e088308270f783017975faa6f28de9ffdf2ae5073d030c2f5da3"
   official_pipeline_root: "s3://mlpipeline/loom-official"
   native_service_account: loom-pipeline-task
   native_parallelism: 4

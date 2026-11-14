@@ -48,6 +48,8 @@ docker compose up -d
 
 启动需要真实 Kubernetes 的普通 worker/sync：
 
+`sync` 已改为 Informer + WorkQueue，需已安装 Profile、Notebook、Istio API，并具有相关资源的 list/watch 权限。详情见 [资源状态观测](../../platform/docs/resource-observation.md)。
+
 ```bash
 docker compose --profile cluster up -d
 ```

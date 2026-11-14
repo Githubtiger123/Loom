@@ -3,12 +3,10 @@ package k8s
 import (
 	"context"
 	"fmt"
-	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -24,10 +22,7 @@ const (
 // Informer callbacks enqueue keys only. The installed official runtime backend
 // must recheck durable ownership and live UID before interpreting observations.
 func (c *Client) NewPipelineWorkflowInformer() cache.SharedIndexInformer {
-	factory := dynamicinformer.NewFilteredDynamicSharedInformerFactory(c.dyn, 30*time.Second, metav1.NamespaceAll, func(opts *metav1.ListOptions) {
-		opts.LabelSelector = labelManagedBy + "=" + managedByLoom
-	})
-	return factory.ForResource(WorkflowGVR).Informer()
+	return c.NewResourceInformer(WorkflowGVR, labelManagedBy+"="+managedByLoom)
 }
 
 type PipelineWorkflowRef struct {
